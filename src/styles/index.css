@@ -1,0 +1,794 @@
+/*
+ * email-chat-view — design tokens.
+ *
+ * Ship-compiled CSS, hand-authored rather than generated. There is no Tailwind
+ * here on purpose: Tailwind's model is "scan the consumer's source for class
+ * names", which cannot work for code that ships pre-built in `dist/`, and its
+ * preflight reset would leak into the host application's own layout. A small
+ * tokenized stylesheet is both smaller and safer to drop into somebody else's
+ * app.
+ *
+ * EVERY value the components use is declared here as a `--sec-*` variable, and
+ * every one resolves through the HOST's token of the same meaning first:
+ *
+ *     --sec-brand: var(--brand, #3069B0);
+ *
+ * So the library inherits an app that already has a design system (inside sarv,
+ * `--brand` is already defined and these defaults never apply), and stands on
+ * its own in an app that does not. A consumer who wants to restyle one thing
+ * overrides one variable on any ancestor — no `!important`, no build step, no
+ * fork:
+ *
+ *     .my-thread { --sec-bubble-mine-bg: #0b57d0; }
+ *
+ * Class names are all `sec-` prefixed so they cannot collide with the host's.
+ */
+
+:root {
+  /* ---------- Colour ---------- */
+  --sec-brand: var(--brand, #3069b0);
+  --sec-brand-deep: var(--brand-deep, #1f457a);
+  --sec-brand-soft: var(--brand-soft, #eaf2fa);
+
+  --sec-surface: var(--surface, #ffffff);
+  --sec-surface-2: var(--surface-2, #f7f8fb);
+  --sec-border: var(--border, #e6e9f1);
+  --sec-ink: var(--ink, #0b1530);
+  --sec-muted: var(--muted, #6b7691);
+
+  --sec-danger: var(--color-danger-500, #d94a4a);
+  --sec-danger-soft: var(--color-danger-50, #fdecec);
+  --sec-warning-soft: var(--color-warning-50, #fef6e0);
+  --sec-warning-ink: var(--color-warning-700, #8a6708);
+
+  /* ---------- Bubbles ---------- */
+  /* Named by ROLE, not colour, so an override reads as intent. */
+  --sec-bubble-mine-bg: var(--sec-brand);
+  --sec-bubble-mine-ink: #ffffff;
+  /* Transparent by default: a solid brand bubble needs no outline. A host that
+     tints instead of filling wants the edge back, and this is where it asks. */
+  --sec-bubble-mine-border: transparent;
+  --sec-bubble-mine-link: inherit;
+  --sec-bubble-theirs-bg: var(--sec-surface);
+  --sec-bubble-theirs-ink: var(--sec-ink);
+  --sec-bubble-radius: var(--r-lg, 12px);
+  --sec-bubble-max-width: 78%;
+
+  /* ---------- Typography ---------- */
+  --sec-font: var(--font-sans, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  --sec-fs-meta: var(--fs-xs, 11px);
+  --sec-fs-body: var(--fs-base, 13px);
+  --sec-lh-body: var(--lh-base, 1.5);
+  --sec-fw-medium: var(--fw-medium, 500);
+  --sec-fw-semi: var(--fw-semi, 600);
+
+  /* ---------- Spacing / elevation ---------- */
+  --sec-gap: var(--space-2, 8px);
+  --sec-gap-sm: var(--space-1, 4px);
+  --sec-pad: var(--space-3, 12px);
+  --sec-pad-lg: var(--space-4, 16px);
+  --sec-shadow: var(--shadow-xs, 0 1px 0 rgba(13, 22, 56, 0.04));
+  --sec-shadow-pop: var(--shadow-md, 0 6px 20px rgba(13, 22, 56, 0.18));
+
+  /* ---------- Component knobs ---------- */
+  /*
+   * The values a token layer usually forgets and a component then hard-codes.
+   * They are here for the same reason the colours are: so restyling one is an
+   * override on an ancestor rather than a fork.
+   */
+  --sec-avatar-size: 28px;
+  --sec-avatar-ink: var(--surface, #ffffff);
+  --sec-radius-sm: var(--r-sm, 6px);
+  --sec-radius-pill: 999px;
+  --sec-tooltip-bg: var(--tooltip-bg, #1b2340);
+  --sec-tooltip-ink: var(--tooltip-ink, #ffffff);
+  --sec-fs-tooltip: var(--fs-sm, 12px);
+  --sec-ghost-bg: var(--sec-surface-2);
+  --sec-focus-ring: var(--sec-brand);
+  /* Above a scrolling list, below the host's own modals and menus. */
+  --sec-z-tooltip: 1000;
+  /* Above the neighbouring bubbles it overhangs, below the tooltip it can open. */
+  --sec-z-actions: 5;
+  --sec-dur: 120ms;
+  /* Where a long filename or recipient list starts to ellipsize. */
+  --sec-name-max-width: 22ch;
+}
+
+/*
+ * Dark scheme.
+ *
+ * Only the FALLBACKS change here. Every token still resolves through the
+ * host's variable of the same meaning first, so an app with its own dark theme
+ * keeps driving these; this block is what stops the library from being a white
+ * slab in an app that has no tokens at all and simply follows the OS.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sec-brand-soft: var(--brand-soft, #16243a);
+    --sec-surface: var(--surface, #171a21);
+    --sec-surface-2: var(--surface-2, #1f232c);
+    --sec-border: var(--border, #2c313c);
+    --sec-ink: var(--ink, #e8eaf0);
+    --sec-muted: var(--muted, #969db1);
+    --sec-danger: var(--color-danger-500, #e8756f);
+    --sec-danger-soft: var(--color-danger-50, #3a1f21);
+    --sec-warning-soft: var(--color-warning-50, #3a2f16);
+    --sec-warning-ink: var(--color-warning-700, #e2c56b);
+    --sec-tooltip-bg: var(--tooltip-bg, #2b3245);
+    --sec-shadow: var(--shadow-xs, 0 1px 0 rgba(0, 0, 0, 0.4));
+    --sec-shadow-pop: var(--shadow-md, 0 6px 20px rgba(0, 0, 0, 0.5));
+  }
+}
+
+/*
+ * ============================================================================
+ * Components
+ * ============================================================================
+ *
+ * One stylesheet for the whole package:
+ *
+ *     import 'email-chat-view/style.css';
+ *
+ * Rules to note before editing:
+ *
+ *   - No value below is a literal. Everything is a `--sec-*` token from above,
+ *     which is what makes the library themeable without a build step.
+ *   - No element selectors outside `.sec-body` (a message's own markup, which
+ *     has no classes to hook). Nothing here can reach the host's DOM.
+ *   - No `!important` anywhere, so a consumer's own rule always wins.
+ *   - Single class specificity wherever possible, for the same reason.
+ */
+
+/* ---------------------------------------------------------------- thread --- */
+
+.sec-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sec-gap);
+  /* The library scrolls itself: the visible-range observer uses this element as
+     its root, and a host that scrolls an ancestor instead would report the
+     whole thread as visible. */
+  overflow-y: auto;
+  padding: var(--sec-pad);
+  font-family: var(--sec-font);
+  font-size: var(--sec-fs-body);
+  line-height: var(--sec-lh-body);
+  color: var(--sec-ink);
+}
+
+.sec-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sec-gap);
+}
+
+/* Scroll anchor at the very bottom. Zero-height on purpose — it must not add
+   space below the last bubble. */
+.sec-bottom {
+  height: 0;
+  scroll-margin-block-end: var(--sec-pad);
+}
+
+/* ------------------------------------------------------- date separator --- */
+
+.sec-date-sep {
+  display: flex;
+  align-items: center;
+  gap: var(--sec-gap);
+  margin-block: var(--sec-gap-sm);
+}
+
+.sec-date-sep__line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--sec-border);
+}
+
+.sec-date-sep__label {
+  flex: 0 0 auto;
+  font-size: var(--sec-fs-meta);
+  font-weight: var(--sec-fw-medium);
+  color: var(--sec-muted);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- messages --- */
+
+.sec-item {
+  margin-block-start: var(--sec-gap);
+}
+
+/* A follow-up inside a sender run sits tight against the message above it —
+   that gap difference is the only thing telling the reader the two belong
+   together, since the run has no repeated avatar or header to say so. */
+.sec-item--run {
+  margin-block-start: var(--sec-gap-sm);
+}
+
+.sec-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sec-gap);
+  /* The hovered row's controls hang outside its own column (see `.sec-actions`)
+     and would otherwise be painted over by the next row's bubble. */
+  position: relative;
+}
+
+.sec-row:hover {
+  z-index: 1;
+}
+
+/* Mirrored rather than re-laid-out, so "mine" and "theirs" can never drift
+   apart: one flex direction flips the avatar, the header and the bubble
+   together. */
+.sec-row--mine {
+  flex-direction: row-reverse;
+}
+
+.sec-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sec-avatar-size);
+  height: var(--sec-avatar-size);
+  border-radius: 50%;
+  background: var(--sec-brand);
+  color: var(--sec-avatar-ink);
+  font-size: var(--sec-fs-meta);
+  font-weight: var(--sec-fw-semi);
+  text-transform: uppercase;
+  user-select: none;
+}
+
+/* Holds the run's bubbles in line with the first one. Invisible, not absent. */
+.sec-avatar--spacer {
+  background: transparent;
+}
+
+.sec-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sec-gap-sm);
+  /* `min-width: 0` is what lets the ellipsis rules below actually fire: without
+     it a flex item refuses to shrink below its content's intrinsic width, and
+     a long unbroken address blows the bubble past the column. */
+  min-width: 0;
+  /* Grow to the cap by default. A framed body is an iframe, which resolves
+     `width: 100%` against this column — leave the column to its intrinsic
+     width and the iframe collapses to the UA-default 300px and the bubble
+     looks tiny next to a plain-text one. `--hug` opts back out below. */
+  flex: 1 1 auto;
+  max-width: var(--sec-bubble-max-width);
+  /* The positioning context for `.sec-actions`, which sits outside this box. */
+  position: relative;
+}
+
+.sec-row--theirs .sec-col {
+  align-items: flex-start;
+}
+
+.sec-row--mine .sec-col {
+  align-items: flex-end;
+}
+
+/* A short reply hugs its text; only a framed body claims the whole column. */
+.sec-col--hug {
+  flex: 0 1 auto;
+}
+
+/* ------------------------------------------------------- bubble header --- */
+
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  /* The SMALL gap: this one separates "Sender → recipients" from the time
+     inside one line of metadata. `--sec-gap` is the avatar-to-bubble distance,
+     and a host that widens that to open the layout up must not also push the
+     timestamp away from the name it belongs to. */
+  gap: var(--sec-gap-sm);
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: var(--sec-gap-sm);
+  font-size: var(--sec-fs-meta);
+  color: var(--sec-muted);
+}
+
+.sec-row--mine .sec-head {
+  flex-direction: row-reverse;
+}
+
+.sec-head__who {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sec-gap-sm);
+  min-width: 0;
+  /* Not a link and not a button — hovering it reveals the full From/To/Cc,
+     clicking it does nothing. `help` is the one cursor that says exactly that,
+     and without a cursor change the tooltip is undiscoverable: nothing else
+     marks these names as holding more than they show. */
+  cursor: help;
+}
+
+.sec-head__sender {
+  font-weight: var(--sec-fw-semi);
+  color: var(--sec-ink);
+  white-space: nowrap;
+}
+
+/* The recipient run is two elements so that the width runs out on the NAMES
+   and never on the count. One element, one ellipsis, applied at the end: a
+   message to twenty-five people used to read `Ankur Dubey +23 othe…`, which
+   is the one part of the header the reader cannot reconstruct by looking. The
+   names can be cut instead — the tooltip has all of them in full. */
+.sec-head__to {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sec-gap-sm);
+  min-width: 0;
+  max-width: var(--sec-name-max-width);
+  white-space: nowrap;
+}
+
+.sec-head__names {
+  overflow: hidden;
+  /* `min-width: 0` is what actually lets this shrink: a flex item's floor is
+     its min-content width by default, so without it the names refuse to give
+     any ground and push the count out of the container instead of ellipsising.
+     `flex-shrink` alone does nothing against that floor. */
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.sec-head__more {
+  flex: 0 0 auto;
+}
+
+.sec-head__time {
+  flex: 0 0 auto;
+  /* Digits of equal width, so a column of timestamps does not shimmy as the
+     minutes change. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------------- bubble --- */
+
+.sec-bubble {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--sec-pad);
+  border: 1px solid var(--sec-border);
+  border-radius: var(--sec-bubble-radius);
+  background: var(--sec-bubble-theirs-bg);
+  color: var(--sec-bubble-theirs-ink);
+  box-shadow: var(--sec-shadow);
+  /* Mail contains URLs, base64 fragments and German compound nouns. Without
+     this one of them eventually pushes the bubble out of the viewport. */
+  overflow-wrap: anywhere;
+}
+
+.sec-bubble--mine {
+  border-color: var(--sec-bubble-mine-border);
+  background: var(--sec-bubble-mine-bg);
+  color: var(--sec-bubble-mine-ink);
+}
+
+/* An inline colour set by the sender-colour map would otherwise paint the
+   reader's own bubble too; `--theirs` is where that tint belongs. */
+.sec-bubble--theirs {
+  background: var(--sec-bubble-theirs-bg);
+}
+
+.sec-bubble--wide {
+  width: 100%;
+}
+
+/* The squared corner points back at the avatar, and only on the FIRST bubble of
+   a run — which is exactly where the avatar is. */
+.sec-bubble--tail.sec-bubble--theirs {
+  border-start-start-radius: var(--sec-radius-sm);
+}
+
+.sec-bubble--tail.sec-bubble--mine {
+  border-start-end-radius: var(--sec-radius-sm);
+}
+
+/* ---------------------------------------------------------------- body --- */
+
+/*
+ * The only element selectors in this file, and they are scoped to `.sec-body`:
+ * a message's own markup arrives without classes, so there is nothing else to
+ * hook. Kept deliberately thin — the sanitizer has already removed everything
+ * structural, and over-styling from out here fights the sender's intent.
+ */
+.sec-body > :first-child {
+  margin-block-start: 0;
+}
+
+.sec-body > :last-child {
+  margin-block-end: 0;
+}
+
+.sec-body p {
+  margin-block: 0 var(--sec-gap);
+}
+
+.sec-body a {
+  color: var(--sec-brand);
+  text-decoration: underline;
+}
+
+/* On a brand-FILLED bubble the brand link colour has no contrast left, so the
+   underline carries the affordance alone. A host that tints its own bubble
+   instead of filling it should point this back at `--sec-brand`. */
+.sec-bubble--mine .sec-body a {
+  color: var(--sec-bubble-mine-link);
+}
+
+.sec-body ul,
+.sec-body ol {
+  margin-block: 0 var(--sec-gap);
+  padding-inline-start: var(--sec-pad-lg);
+}
+
+.sec-body blockquote {
+  margin-block: var(--sec-gap);
+  margin-inline: 0;
+  padding-inline-start: var(--sec-pad);
+  border-inline-start: 2px solid var(--sec-border);
+  color: var(--sec-muted);
+}
+
+.sec-body code {
+  padding: 0 var(--sec-gap-sm);
+  border-radius: var(--sec-radius-sm);
+  background: var(--sec-surface-2);
+  font-family: ui-monospace, monospace;
+}
+
+/* --------------------------------------------------------------- frame --- */
+
+.sec-frame-host {
+  display: block;
+  width: 100%;
+}
+
+.sec-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  /* Fades in once measured, so the reader never sees the estimated height snap
+     to the real one. */
+  transition: opacity var(--sec-dur) ease-out;
+}
+
+/* --------------------------------------------------------------- notes --- */
+
+/* Loading / failed / empty / images-blocked all share one shape, so the four
+   states read as the same kind of thing rather than four separate designs. */
+.sec-note {
+  display: flex;
+  align-items: center;
+  gap: var(--sec-gap-sm);
+  font-size: var(--sec-fs-meta);
+  color: var(--sec-muted);
+}
+
+.sec-note__text {
+  min-width: 0;
+}
+
+.sec-note--quiet {
+  font-style: italic;
+}
+
+.sec-note--danger {
+  padding: var(--sec-gap-sm) var(--sec-gap);
+  border-radius: var(--sec-radius-sm);
+  background: var(--sec-danger-soft);
+  color: var(--sec-danger);
+}
+
+.sec-note--images {
+  margin-block-end: var(--sec-gap);
+  padding: var(--sec-gap-sm) var(--sec-gap);
+  border-radius: var(--sec-radius-sm);
+  background: var(--sec-warning-soft);
+  color: var(--sec-warning-ink);
+}
+
+.sec-spin {
+  flex: 0 0 auto;
+  animation: sec-spin 800ms linear infinite;
+}
+
+@keyframes sec-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------- buttons --- */
+
+.sec-link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sec-brand);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Inside a coloured note the note's own ink is the readable one. */
+.sec-note--danger .sec-link-btn,
+.sec-note--images .sec-link-btn {
+  color: inherit;
+}
+
+.sec-link-btn:focus-visible,
+.sec-chip__btn:focus-visible,
+.sec-more:focus-visible {
+  outline: 2px solid var(--sec-focus-ring);
+  outline-offset: 1px;
+}
+
+/* --------------------------------------------------------- attachments --- */
+
+.sec-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sec-gap-sm);
+  margin-block-start: var(--sec-gap);
+}
+
+.sec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sec-gap-sm);
+  max-width: 100%;
+  padding: var(--sec-gap-sm) var(--sec-gap);
+  border: 1px solid var(--sec-border);
+  border-radius: var(--sec-radius-pill);
+  background: var(--sec-surface-2);
+  font-size: var(--sec-fs-meta);
+  color: var(--sec-ink);
+}
+
+/* On a brand-filled bubble the chip borrows the bubble's own ink rather than
+   introducing a second surface colour that would need its own contrast. */
+.sec-bubble--mine .sec-chip {
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+}
+
+.sec-chip__clip {
+  flex: 0 0 auto;
+  color: var(--sec-muted);
+}
+
+.sec-bubble--mine .sec-chip__clip,
+.sec-bubble--mine .sec-chip__size {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.sec-chip__name {
+  overflow: hidden;
+  max-width: var(--sec-name-max-width);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sec-chip__size {
+  flex: 0 0 auto;
+  color: var(--sec-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sec-chip__btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sec-radius-sm);
+  background: none;
+  color: var(--sec-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sec-chip__btn:hover {
+  color: var(--sec-ink);
+}
+
+.sec-bubble--mine .sec-chip__btn {
+  color: inherit;
+}
+
+/* ------------------------------------------------------------- actions --- */
+
+/*
+ * Hidden until the row is hovered or something inside it is focused — a chat
+ * with a control cluster on every message stops reading as a conversation.
+ * `focus-within` is not optional: without it the controls are unreachable by
+ * keyboard, because tabbing to an invisible button would leave the reader on a
+ * control they cannot see.
+ *
+ * Taken out of the flow and hung off the column's OUTER edge, level with the
+ * header. In the flow it would sit under the bubble as a permanent empty strip
+ * — the row would grow and shrink as the pointer crossed it, and the whole
+ * thread would jitter. Outside, it costs no space and reveals into the gutter
+ * the bubble's max-width already leaves free.
+ */
+.sec-actions {
+  position: absolute;
+  inset-block-start: 0;
+  z-index: var(--sec-z-actions);
+  display: flex;
+  align-items: center;
+  gap: var(--sec-gap-sm);
+  opacity: 0;
+  transition: opacity var(--sec-dur) ease-out;
+}
+
+/* `inset-inline-*` follows the writing direction, not the row's flex direction,
+   so these two are the mirror pair `row-reverse` cannot express: whichever side
+   the bubble is anchored to, the controls go on the other one. */
+.sec-row--theirs .sec-actions {
+  inset-inline-start: 100%;
+  padding-inline-start: var(--sec-gap-sm);
+}
+
+.sec-row--mine .sec-actions {
+  inset-inline-end: 100%;
+  padding-inline-end: var(--sec-gap-sm);
+}
+
+.sec-row:hover .sec-actions,
+.sec-row:focus-within .sec-actions {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------ tooltips --- */
+
+.sec-tooltip-host {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sec-tooltip {
+  /* `fixed`, positioned from a measured rect: a scrolling message list clips
+     everything with `overflow`, and an absolutely-positioned tooltip would be
+     cut off by the first ancestor that scrolls. */
+  position: fixed;
+  z-index: var(--sec-z-tooltip);
+  padding: var(--sec-gap-sm) var(--sec-gap);
+  border-radius: var(--sec-radius-sm);
+  background: var(--sec-tooltip-bg);
+  color: var(--sec-tooltip-ink);
+  box-shadow: var(--sec-shadow-pop);
+  /* Its own size, not the header's: a tooltip is read once, deliberately, and
+     the metadata size that works inline is too small for a list of addresses. */
+  font-size: var(--sec-fs-tooltip);
+  line-height: var(--sec-lh-body);
+  /* So the tooltip can never eat the hover it depends on. */
+  pointer-events: none;
+}
+
+.sec-addr {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: start;
+}
+
+.sec-addr-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sec-gap-sm);
+}
+
+/* "From" / "To" / "Cc": a fixed column so the addresses line up, dimmed and
+   bolded so the eye reads down the labels or across a row, not both at once. */
+.sec-addr-row__label {
+  flex: 0 0 auto;
+  min-width: 2.25em;
+  font-weight: var(--sec-fw-semi);
+  opacity: 0.7;
+}
+
+.sec-addr-row__value {
+  overflow-wrap: anywhere;
+}
+
+/* -------------------------------------------------------- top / paging --- */
+
+.sec-top {
+  display: flex;
+  justify-content: center;
+}
+
+.sec-more {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: var(--sec-gap-sm);
+  padding: var(--sec-gap-sm) var(--sec-pad);
+  border: 1px solid var(--sec-border);
+  border-radius: var(--sec-radius-pill);
+  background: var(--sec-surface);
+  color: var(--sec-muted);
+  font: inherit;
+  font-size: var(--sec-fs-meta);
+  cursor: pointer;
+}
+
+.sec-more:hover:not(:disabled) {
+  border-color: var(--sec-brand);
+  color: var(--sec-ink);
+}
+
+.sec-more:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* --------------------------------------------------- empty / skeleton --- */
+
+.sec-empty {
+  padding: var(--sec-pad-lg);
+  color: var(--sec-muted);
+  text-align: center;
+}
+
+.sec-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sec-gap);
+}
+
+.sec-ghost {
+  align-self: flex-start;
+  min-height: calc(var(--sec-avatar-size) + var(--sec-gap));
+  border-radius: var(--sec-bubble-radius);
+  background: var(--sec-ghost-bg);
+  animation: sec-pulse 1400ms ease-in-out infinite;
+}
+
+.sec-ghost--mine {
+  align-self: flex-end;
+  background: var(--sec-brand-soft);
+}
+
+@keyframes sec-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ------------------------------------------------------------- motion --- */
+
+/*
+ * Everything animated above is decorative — a spinner, a pulse, two fades —
+ * so a reader who has asked for less motion loses nothing by turning them off.
+ * The spinner keeps its shape and simply stops; the frame appears instantly
+ * instead of fading.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .sec-spin,
+  .sec-ghost {
+    animation: none;
+  }
+
+  .sec-frame,
+  .sec-actions {
+    transition: none;
+  }
+}
