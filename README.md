@@ -1,28 +1,38 @@
 # email-chat-view
 
+[![npm version](https://img.shields.io/npm/v/email-chat-view.svg)](https://www.npmjs.com/package/email-chat-view)
+[![npm downloads](https://img.shields.io/npm/dm/email-chat-view.svg)](https://www.npmjs.com/package/email-chat-view)
+[![CI](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml/badge.svg)](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/email-chat-view.svg)](./LICENSE)
+
 Turn an email thread into a chat-style conversation.
+
+**npm:** [`email-chat-view`](https://www.npmjs.com/package/email-chat-view) ·
+**source:** [Sarv/email-chat-view](https://github.com/Sarv/email-chat-view) ·
+**examples:** [runnable examples](./examples) ·
+**issues:** [report one](https://github.com/Sarv/email-chat-view/issues) ·
+**contributing:** [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 You supply the mails. It gives you back one bubble's worth of content per turn —
 quoted history, signatures and legal footers already removed — so a thread reads
 like a chat instead of like fourteen nested copies of itself.
 
-```text
-WHAT THE MAIL STORE GIVES YOU              WHAT THE READER SEES
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sarv/email-chat-view/main/docs/media/thread-to-chat.gif"
+       alt="A four-message email thread: each signature, quoted copy and legal footer is tagged with the rule that matches it, collapses away, and the remainder becomes one chat bubble per turn"
+       width="880">
+</p>
 
-  Yes, 10am works.                                   ┌──────────────────────┐
-                                                     │ Hi — are we still on │
-  --                                                 │ for Tuesday?         │
-  Alice Chen | VP Sales | Acme Corp                  └──────────────────────┘
-  +1 555 0100 | acme.example                    ┌──────────────────────┐
-                                      ──▶       │ Yes, 10am works.     │
-  On Mon, 3 Mar 2025, Bob wrote:                └──────────────────────┘
-  > Hi — are we still on for Tuesday?
-  >> Let me check the calendar
+<p align="center">
+  <em>Every removal above is a named rule &mdash; the labels in the animation are the
+  strings the library hands back in <code>message.applied</code>.</em>
+</p>
 
-  CONFIDENTIALITY NOTICE: This email and any
-  attachments are confidential and intended
-  solely for the addressee...
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sarv/email-chat-view/main/docs/media/before-after.png"
+       alt="Side by side: the raw thread with quoted history, signatures and a confidentiality footer, and the same thread as a chat"
+       width="880">
+</p>
 
 **Zero required dependencies.** No React needed for the transform, no DOM
 assumed, no `mode` flag, nothing global. TypeScript throughout, ESM and CJS,
@@ -34,15 +44,19 @@ assumed, no `mode` flag, nothing global. TypeScript throughout, ESM and CJS,
 
 - [Install](#install)
 - [Quick start](#quick-start)
+- [Examples](#examples)
 - [Running outside a browser](#running-outside-a-browser)
 - [Dates: say which unit you have](#dates-say-which-unit-you-have)
 - [Big threads: how mails are supplied](#big-threads-how-mails-are-supplied)
 - [Why part of my email disappeared](#why-part-of-my-email-disappeared)
 - [The rules](#the-rules)
-- [Contributing a rule](#contributing-a-rule)
+- [Writing your own rule](#writing-your-own-rule)
 - [Classifying automated mail](#classifying-automated-mail)
 - [API](#api)
+- [Project structure](#project-structure)
 - [Development](#development)
+- [Contributing](#contributing)
+- [Releasing](#releasing)
 
 ---
 
@@ -54,7 +68,7 @@ npm install email-chat-view
 pnpm add email-chat-view
 ```
 
-From a local checkout, before the first npm publish:
+From a local checkout — a fork you are working on, or a patched build:
 
 ```sh
 pnpm add file:../email-chat-view
@@ -78,11 +92,11 @@ import { mailsToMessages } from 'email-chat-view/transform';   // ESM
 const { mailsToMessages } = require('email-chat-view/transform'); // CJS
 ```
 
-> **Status.** The transform layer, the rule registry and the classifier are
-> complete and shipped. The React components (`MailChatView` and friends) are
-> still landing — this README documents them where the contract is already
-> settled, and marks each one **not yet shipped**. Everything else here works
-> today.
+> **Status.** Published on npm and complete end to end: the transform layer,
+> the rule registry, the classifier and the React view (`MailChatView` and every
+> part below it) all ship in the current release. The version is still `0.x`, so
+> the surface can change on a minor bump — anything that does will be called out
+> in the release notes.
 
 ---
 
@@ -111,7 +125,7 @@ const messages = mailsToMessages(mails, {
 resolves who each message is from, normalizes every date to epoch milliseconds,
 and cleans each body.
 
-### The view — *not yet shipped*
+### The view
 
 ```tsx
 import { MailChatView } from 'email-chat-view';
@@ -120,11 +134,36 @@ import 'email-chat-view/style.css';
 <MailChatView messages={messages} />;
 ```
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sarv/email-chat-view/main/docs/media/chat-view.png"
+       alt="The MailChatView component: day separators, per-participant colours, an attachment chip, and the reader's own messages right-aligned"
+       width="880">
+</p>
+
 The view takes `ChatMessage[]` and nothing else mandatory. It does not know what
 a mail is, so anything that produces per-turn content — the transform above, an
 LLM extraction pass, your own parser — feeds the same component. **That is why
 there is no `mode` prop anywhere in this package:** the view renders messages,
 and where they came from is your business.
+
+---
+
+## Examples
+
+Working code for each of the three ways this gets used, in [`examples/`](./examples):
+
+| Example | Shows |
+| --- | --- |
+| [`node-transform`](./examples/node-transform/thread-to-chat.mjs) | a thread → chat messages in Node — injected parser, `dateUnit`, the body cache, a pending body |
+| [`custom-rules`](./examples/custom-rules/acme-signature.mjs) | adding a rule for an unknown client, adding a German marker, dropping a shipped rule that is too loose |
+| [`react-thread`](./examples/react-thread/MailThread.tsx) | the view wired like a real mail client — streaming bodies, visible-range prioritisation, upward paging |
+
+The first two run straight from a clone:
+
+```sh
+pnpm install && pnpm build
+node examples/node-transform/thread-to-chat.mjs
+```
 
 ---
 
@@ -238,10 +277,10 @@ messages does not retain every body it ever rendered.
 For a single message — a retry, one arriving body — `mailToMessage` transforms
 one mail without touching the rest of the thread.
 
-### Paging older messages — *view props not yet shipped*
+### Paging older messages
 
 Threads are rendered newest-at-the-bottom, so paging goes *upward*. The view
-will take:
+takes:
 
 ```tsx
 <MailChatView
@@ -341,10 +380,12 @@ Three details worth knowing, because each was a real bug:
 
 ---
 
-## Contributing a rule
+## Writing your own rule
 
-A rule is a plain object, so a contribution is **one rule object and one
-fixture** — no engine changes, no reading the rest of the set.
+A rule is a plain object, so a new one is **one object and one test** — no
+engine changes, no reading the rest of the set. Pass it at call time for a
+corpus only you have; open a PR when the provider is one other people also
+receive mail from ([CONTRIBUTING.md](./CONTRIBUTING.md) walks through that).
 
 Say your client wraps signatures in `<div class="acme-sig">`:
 
@@ -361,7 +402,7 @@ export const acmeSignature: DomRule = {
 ```
 
 Then either pass it (`{ signatureRules: [...signatureRules, acmeSignature] }`)
-or open a PR adding it to `src/rules/signature.ts` with a fixture.
+or open a PR adding it to `src/rules/signature.ts` with a test.
 
 **Test it against markup a real client produces, not markup you typed.** A
 marker rule tested against prettier input than the wild produces is a rule that
@@ -408,10 +449,14 @@ against both the markup form and the bare-text form: whether the boundary is
 still wrapped in a `<div>` by the time the pass sees it depends on which earlier
 rules fired.
 
-Contributed rules cannot break the render. An unparseable selector degrades to
-"matched nothing", a throwing `test` vetoes the match, a throwing classification
-signal is skipped — a bad rule shows an unstripped signature, never an
-unrendered message.
+Rules cannot break the render. An unparseable selector degrades to "matched
+nothing", a throwing `test` vetoes the match, a throwing classification signal is
+skipped — a bad rule shows an unstripped signature, never an unrendered message.
+
+Rules that belong upstream — a provider convention, a non-English marker — are
+the most valuable contribution this package takes. See
+[CONTRIBUTING.md](./CONTRIBUTING.md#adding-a-rule) for where the file goes, what
+the test has to prove, and how to capture real markup to test it against.
 
 ---
 
@@ -513,6 +558,37 @@ so your editor explains them without a trip back here.
 
 ---
 
+## Project structure
+
+Three layers, and the boundaries between them are the design. Each one is
+importable without the one above it, which is what lets a Node pipeline use the
+transform with no React and a host with its own list use the bubble without the
+view around it.
+
+```text
+src/
+  index.ts          package root — re-exports transform + view
+  transform.ts      'email-chat-view/transform' entry — no React, no DOM assumed
+  view.ts           React entry — components and the pure UI helpers
+  types.ts          the public data contract: Mail, ChatMessage, Attachment
+  dom.ts            injectable HTML parser (resolveParser, NoDomParserError)
+  rules/            provider conventions AS DATA — signature/quote/marker/disclaimer
+  transform/        the engines that apply those rules, and mailsToMessages
+  classify/         automated-vs-conversational scoring
+  ui/               pure view logic: dates, colours, grouping, sanitize, frame
+  components/       the React components
+  styles/index.css  the --sec-* token layer, compiled to dist/style.css
+test/               one file per module, mirroring src/
+.github/workflows/  ci.yml (every push/PR) and publish.yml (v* tags)
+```
+
+A file-by-file map — what each module owns and why it is separate — is in
+[CONTRIBUTING.md](./CONTRIBUTING.md#the-map), next to the guide for changing
+them. Every source file also opens with a docblock stating the decision it
+encodes, so the file itself is the second place to look.
+
+---
+
 ## Development
 
 ```sh
@@ -538,6 +614,62 @@ so overriding one thing is one variable on any ancestor:
 ```css
 .my-thread { --sec-bubble-mine-bg: #0b57d0; }
 ```
+
+---
+
+## Contributing
+
+Contributions are welcome, and rules are the ones that help most: a provider
+whose signature markup nobody here has seen, or a non-English `On … wrote:`
+marker — currently every marker rule is English, which is the single biggest gap
+in the package.
+
+Read **[CONTRIBUTING.md](./CONTRIBUTING.md)** before opening a PR. It covers the
+local setup, the file-by-file map of the codebase, how to add each of the four
+rule kinds, what the tests have to prove (coverage is enforced at 100%), and the
+commit and PR conventions.
+
+- Bugs and rule misfires: [open an issue](https://github.com/Sarv/email-chat-view/issues)
+  and paste the message's `applied` array — it names the rule that ate your text.
+- Security-relevant findings (sanitizer bypass, frame escape): please report
+  them privately rather than in a public issue.
+
+---
+
+## Releasing
+
+Publishing is automated and **the tag is the source of truth**: pushing `v0.1.0`
+publishes 0.1.0. The version is written into `package.json` by the workflow, so
+a release is one command and there is no second place to keep in sync.
+
+```sh
+git tag v0.1.0
+git push --tags
+```
+
+`npm version patch && git push --follow-tags` works too, and still does the
+right thing — it writes `package.json` and the matching tag together. Either
+way the workflow publishes what the tag says, warning in the log if
+`package.json` was behind.
+
+A tag that isn't semver (`v2.0`, `vfinal`) is rejected up front rather than
+three minutes later. Then it runs `type-check`, the whole suite and `build`
+before anything leaves the building — a published version can't be un-published
+after 72 hours, and can never be re-published at the same number.
+
+There is no manual `npm publish` step, and there shouldn't be — a hand publish
+from a laptop skips that gate and ships whatever `dist/` happened to be lying
+around.
+
+Tarballs go out with [npm provenance][provenance], so every release carries a
+signed record of which workflow, commit and repo produced it.
+
+One-time setup on a fork: add an `NPM_TOKEN` repository secret (Settings →
+Secrets and variables → Actions) holding an npm **automation** token. Granular
+or classic both work, but it must be the automation kind — any other token type
+prompts for 2FA, which no CI runner can answer.
+
+[provenance]: https://docs.npmjs.com/generating-provenance-statements
 
 ## License
 
