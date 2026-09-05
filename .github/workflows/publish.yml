@@ -1,0 +1,79 @@
+# Publish to npm when a version tag is pushed.
+#
+# THE TAG IS THE SOURCE OF TRUTH. Pushing `v0.1.0` publishes 0.1.0 — the version
+# is written into package.json here, in CI, so releasing is one command and
+# there is no second place to keep in sync:
+#
+#   git tag v0.1.0 && git push --tags
+#
+# `npm version` locally still works and is still fine (it writes package.json
+# and the matching tag together); this just stops a forgotten bump from being
+# the thing that fails a release.
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # `id-token: write` is what mints the OIDC token npm exchanges for a
+  # provenance attestation — the signed record of which workflow, which commit
+  # and which repo produced the tarball. Without it `--provenance` fails.
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads the pnpm version from `packageManager` in package.json, so CI runs
+      # the same pnpm that produced the lockfile. A newer major would reject the
+      # lockfile format under --frozen-lockfile.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          # Writes the .npmrc that makes NODE_AUTH_TOKEN work at publish time.
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Take the version from the tag
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+
+          # Reject a tag npm could not publish anyway — `v2.0` or `vfinal` would
+          # otherwise fail three minutes later, after the whole suite has run.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag ${GITHUB_REF_NAME} is not a semver version"
+            exit 1
+          fi
+
+          pkg_version="$(node -p "require('./package.json').version")"
+          if [ "$version" != "$pkg_version" ]; then
+            echo "::warning::package.json says ${pkg_version}; publishing ${version} from the tag"
+          fi
+
+          # --no-git-tag-version: write the file only. No commit, no second tag,
+          # and no clean-worktree requirement. --allow-same-version so the
+          # ordinary case (package.json already bumped) is not an error.
+          npm version "$version" --no-git-tag-version --allow-same-version
+          echo "OK: publishing ${version}"
+
+      # The whole pipeline before anything leaves the building. A published
+      # version cannot be un-published after 72 hours, and cannot be re-published
+      # at the same number ever — so this gate runs on the tag, not on trust.
+      - run: pnpm type-check
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,36 @@
+# Type-check, test and build on every push and pull request.
+#
+# The publish workflow runs the same three steps, but only on a tag — which is
+# far too late to learn that main is broken. This is the one that has to be
+# green before a release is ever cut.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The transform layer runs server-side too (Node, no DOM), and the
+        # sanitizer's parser differs by platform — so all three, not just Linux.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm type-check
+      - run: pnpm test
+      - run: pnpm build
