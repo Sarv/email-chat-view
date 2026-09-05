@@ -6,8 +6,10 @@
  * default array is just every rule in a sensible order.
  *
  * ADDING A PROVIDER: export a new rule below, add it to `signatureRules`, and
- * drop a real captured email into `fixtures/signatures/<name>.html`. The
- * corpus test picks it up automatically — no test file to write.
+ * add a row to the `stripSignature` table in `test/strip.test.ts` — plus a
+ * negative case proving the selector is narrow enough to leave a real message
+ * alone. Test it against markup the client actually emitted, not markup you
+ * typed; see CONTRIBUTING.md.
  */
 import type { DomRule } from './types.js';
 
