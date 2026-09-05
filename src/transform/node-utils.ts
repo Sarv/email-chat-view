@@ -21,9 +21,26 @@ const NODE_TYPE_TEXT = 3;
  */
 const NBSP = new RegExp(String.fromCharCode(160), 'g');
 
+/**
+ * Non-breaking spaces folded to ordinary ones.
+ *
+ * THE one place in the package that knows about U+00A0. Every pass that reads
+ * text has to fold it — a rule written with a space must match the same line a
+ * client wrote with `&nbsp;`, or it fires on Gmail and not on Outlook — and a
+ * second copy of this constant is a second chance for one pass to stop folding.
+ */
+/**
+ * ...and it takes the nullable input directly. `Node.textContent` is typed
+ * `string | null`, so every caller would otherwise carry its own `?? ''` —
+ * which is the same duplication one level down.
+ */
+export function foldNbsp(text: string | null | undefined): string {
+  return (text ?? '').replace(NBSP, ' ');
+}
+
 /** Trimmed text with non-breaking spaces treated as ordinary whitespace. */
-function visibleText(node: { textContent?: string | null }): string {
-  return (node.textContent ?? '').replace(NBSP, ' ').trim();
+export function visibleText(node: { textContent?: string | null }): string {
+  return foldNbsp(node.textContent).trim();
 }
 
 /**
@@ -77,7 +94,9 @@ export function isElement(node: Node | null | undefined): node is Element {
 
 /** Normalized text of a node — whitespace collapsed, nbsp folded, trimmed. */
 export function normalizedText(node: { textContent?: string | null } | null | undefined): string {
-  return (node?.textContent ?? '').replace(NBSP, ' ').replace(/\s+/g, ' ').trim();
+  return foldNbsp(node?.textContent)
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
