@@ -38,10 +38,13 @@ export type { BodyCache, MailsToMessagesOptions } from './transform/mails-to-mes
 // --- Individual strip passes -------------------------------------------------
 export {
   cleanReplyBody,
+  stripBanner,
   stripDisclaimer,
+  stripLines,
   stripMarkers,
   stripQuote,
   stripSignature,
+  stripSignOff,
 } from './transform/strip.js';
 export type { CleanReplyBodyOptions, StripFamilyOptions } from './transform/strip.js';
 
@@ -50,12 +53,29 @@ export type { CleanReplyBodyOptions, StripFamilyOptions } from './transform/stri
 // directly, without a serialize/reparse round trip.
 export { applyDisclaimerRules } from './transform/apply-disclaimer-rules.js';
 export { applyDomRules } from './transform/apply-dom-rules.js';
+export { applyLineRules } from './transform/apply-line-rules.js';
 export { applyMarkerRules } from './transform/apply-marker-rules.js';
+export { cutSignOff, hasStrongSignatureEvidence, signOffBlock } from './transform/sign-off.js';
+
+// --- Shape predicates --------------------------------------------------------
+// The building blocks of a `DomRule.test`. A contributed shape rule should be
+// composed from these rather than re-deriving "does this hold a quote?" —
+// that guard drifting per rule is how content gets deleted.
+export {
+  containsQuote,
+  distinctDomainCount,
+  isBannerLineBlock,
+  isContactCard,
+  isLeafBlock,
+  isLogoStrip,
+  isPureBannerBlock,
+} from './transform/block-shapes.js';
 
 // --- Rule types (the contribution contract) ----------------------------------
 export type {
   DisclaimerRule,
   DomRule,
+  LineRule,
   MarkerRule,
   StripOptions,
   StripResult,
@@ -67,13 +87,40 @@ export type {
 // so composing a set is array literal syntax, not an API.
 export {
   appleMailSignature,
+  CARD_MAX_CHARS,
+  contactCard,
+  CONTACT_PHONE_RE,
+  CONTACT_WEB_RE,
   genericSignature,
   gmailSignature,
+  LOGO_STRIP_MAX_CHARS,
+  LOGO_STRIP_MIN_IMAGES,
+  logoStrip,
+  looseSignatureClass,
   outlookDesktopSignature,
   outlookMobileSignature,
+  sarvSignature,
   signatureRules,
   thunderbirdSignature,
 } from './rules/signature.js';
+export {
+  BANNER_BLOCK_MAX_CHARS,
+  BANNER_LINE_MAX_CHARS,
+  bannerBox,
+  bannerLineBlock,
+  bannerPattern,
+  bannerRules,
+} from './rules/banner.js';
+export {
+  bannerLine,
+  forwardMarkerLine,
+  gibberishBlobLine,
+  lineRules,
+  meetingBoilerplateLine,
+  mobileFooterLine,
+  signatureDelimiterLine,
+} from './rules/line.js';
+export { signatureTitlePattern, signOffPatterns } from './rules/sign-off.js';
 export {
   bareBlockquote,
   citeQuote,
