@@ -72,6 +72,21 @@ export interface DomRule {
    */
   boundary?: boolean;
   /**
+   * When matches are NESTED, keep only the deepest one.
+   *
+   * For a selector-driven rule the default — remove every match — is right, and
+   * an outer match simply takes its inner duplicate with it. For a rule that
+   * identifies an element by its SHAPE it is dangerous, because shape is
+   * inherited upwards: a short message whose wrapper `<div>` holds both the
+   * text and the signature card matches "contains a phone and a website and is
+   * under 400 characters" just as the card does. Removing every match there
+   * deleted the entire message — card AND the words above it. Discarding any
+   * candidate that contains another leaves exactly the card.
+   *
+   * Set it on shape rules ({@link test}-driven). Leave it off for selectors.
+   */
+  innermost?: boolean;
+  /**
    * Extra predicate for the rare convention a selector cannot express. Runs
    * after the selector matches and after {@link maxTextLength}; return false to
    * keep the element.
@@ -119,6 +134,61 @@ export interface MarkerRule {
    * linear on hostile input.
    */
   patterns: RegExp[];
+}
+
+/**
+ * A convention that exists as a standalone visual LINE.
+ *
+ * The gap between {@link DomRule} and {@link MarkerRule}, and a surprisingly
+ * large one. An RFC 3676 `-- ` delimiter, a "Sent from my iPhone" footer, a
+ * `-----Original Message-----` separator, a gateway's "External sender" banner:
+ * none has a class to select on, and none can be matched against the serialized
+ * HTML either, because the line it occupies is assembled out of text nodes,
+ * `<br>`s and block boundaries that no single string pattern spans reliably.
+ *
+ * So these are matched against the FLATTENED text, one visual line at a time,
+ * and applied back to the node the line came from.
+ *
+ * @example The mobile-footer convention, in full:
+ * ```ts
+ * { name: 'mobile-footer', provider: 'Common / mobile clients', action: 'cut',
+ *   pattern: /^(sent from my |get outlook for )/i, maxLineLength: 60 }
+ * ```
+ */
+export interface LineRule {
+  /** Stable identifier, reported in {@link StripResult.applied}. */
+  name: string;
+  /** Which client or gateway emits this line, for humans. */
+  provider: string;
+  /** BCP-47 language tag when the line is localized prose. Untagged means English. */
+  language?: string;
+  /**
+   * What the line must match. Tested against the line's text with whitespace
+   * collapsed and non-breaking spaces folded, already trimmed — so anchor with
+   * `^` freely and never account for surrounding space.
+   */
+  pattern: RegExp;
+  /**
+   * Lines longer than this are never this convention.
+   *
+   * Required, with no default, because it is the only thing standing between a
+   * rule and the paragraph it will otherwise eat. "Sent from my phone I could
+   * not reach you earlier…" is a sentence, not a footer, and the length cap is
+   * what tells them apart.
+   */
+  maxLineLength: number;
+  /**
+   * `'cut'` removes the line AND everything after it — for a boundary whose
+   * meaning is "the message ends here" (a signature delimiter, a mobile
+   * footer). `'line'` removes only the line itself — for a marker that sits
+   * above content worth keeping (`-----Original Message-----`, an
+   * external-sender banner above the real body).
+   *
+   * `'cut'` is the more destructive of the two by a wide margin: a mismatch
+   * takes the rest of the message with it. Reach for `'line'` unless the
+   * convention genuinely terminates the message.
+   */
+  action: 'cut' | 'line';
 }
 
 /**
