@@ -17,8 +17,20 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals"],
+    // The examples import the package by its published specifier, exactly as a
+    // consumer's code does — that is the point of them. These map that
+    // specifier back to the source so `tsc` can resolve it in-repo, without the
+    // examples having to import `../../src` and stop being copy-pasteable.
+    "paths": {
+      "email-chat-view": ["./src/index.ts"],
+      "email-chat-view/transform": ["./src/transform.ts"]
+    }
   },
-  "include": ["src", "test"],
+  // `examples` is here so CI type-checks them: an example that no longer
+  // compiles is worse than no example, because it is the first thing people
+  // copy. The `.mjs` ones are not picked up (no `allowJs`) and must not be —
+  // they import the BUILT `dist/`, which does not exist when type-check runs.
+  "include": ["src", "test", "examples"],
   "exclude": ["dist", "node_modules"]
 }
