@@ -77,9 +77,10 @@ pnpm test
 | `pnpm clean` | remove `dist/` |
 | `pnpm media` | rebuild, then regenerate the README GIF and screenshots — see [README media](#readme-media) |
 
-CI runs `type-check`, `test` and `build` on Ubuntu, macOS and Windows against
-Node 18, 20 and 22. Run those three locally before pushing and there should be
-no surprises.
+CI runs `type-check`, `test:coverage` and `build` on Ubuntu, macOS and Windows
+against Node 18, 20 and 22 — coverage rather than a plain test run, because the
+100% thresholds only bite when the coverage reporter runs. Run those three
+locally before pushing and there should be no surprises.
 
 To try a change inside a real app, point the app at your checkout:
 
@@ -197,7 +198,7 @@ rendering anything.
 | `docs/media/` | the generated GIF and screenshots the README links to, plus the Sarv lockup used to watermark them |
 | `tsup.config.ts` | the build: two JS entries plus a CSS entry, ESM + CJS + types |
 | `vitest.config.ts` | Node environment by default, coverage thresholds |
-| `.github/workflows/ci.yml` | type-check, test, build on every push and PR |
+| `.github/workflows/ci.yml` | type-check, test **with coverage thresholds**, build — on every push and PR |
 | `.github/workflows/publish.yml` | publish to npm on a `v*` tag, with provenance |
 
 Every source file opens with a docblock stating the decision it encodes and the

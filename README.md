@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/email-chat-view.svg)](https://www.npmjs.com/package/email-chat-view)
 [![npm downloads](https://img.shields.io/npm/dm/email-chat-view.svg)](https://www.npmjs.com/package/email-chat-view)
 [![CI](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml/badge.svg)](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml)
+[![coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/email-chat-view.svg)](./LICENSE)
 
 Turn an email thread into a chat-style conversation.
@@ -36,7 +37,10 @@ like a chat instead of like fourteen nested copies of itself.
 
 **Zero required dependencies.** No React needed for the transform, no DOM
 assumed, no `mode` flag, nothing global. TypeScript throughout, ESM and CJS,
-100% line and branch coverage on every rule.
+and **100% test coverage** — statements, branches, functions and lines, across
+every rule and every engine. The threshold is enforced in CI on three operating
+systems and Node 18/20/22, so a rule cannot land with an untested branch: each
+one of them can silently delete part of somebody's email.
 
 ---
 
