@@ -61,12 +61,18 @@ describe('applyDomRules', () => {
   });
 
   // Regression: an inner element removed with its outer container must not be
-  // counted again. `querySelectorAll` hands back a STATIC list, so one selector
-  // matching a nest yields both; removing the outer one leaves the inner one in
-  // the list, detached but with its parent link intact. Credited twice, a rule
-  // set reports removals it never made — and `applied` is what a consumer
-  // debugs "why did my content vanish?" with, so it has to name the rule that
-  // actually did it. (A `parentNode` check cannot see this; containment can.)
+  // judged or counted again. `querySelectorAll` hands back a STATIC list, so one
+  // selector matching a nest yields both; removing the outer one leaves the
+  // inner one in the list, detached but with its parent link intact. Credited
+  // twice, a rule set reports removals it never made — and `applied` is what a
+  // consumer debugs "why did my content vanish?" with, so it has to name the
+  // rule that actually did it. (A `parentNode` check cannot see this;
+  // containment can.)
+  //
+  // `test` firing only once is part of the contract, not an accident: guards are
+  // evaluated lazily at removal time, so a shape predicate that walks the
+  // subtree never runs on a match an ancestor already took. Only `innermost`
+  // rules pay for eager evaluation, because only they need it.
   it('counts a nested match removed with its container only once', () => {
     const body = parseBody('<div class="sig">outer<div class="sig">inner</div></div><p>keep</p>');
     const removals: string[] = [];
@@ -236,5 +242,63 @@ describe('applyDomRules', () => {
   it('returns an empty list for an empty rule set', () => {
     const body = parseBody('<p>hi</p>');
     expect(applyDomRules(body, [])).toEqual([]);
+  });
+
+  // Regression: THE bug `innermost` exists for. Shape is inherited upwards, so
+  // the wrapper holding a short message plus its signature card satisfies "looks
+  // like a card" exactly as the card does. Without this flag the outer match
+  // wins and the message is deleted along with the signature — content vanishing
+  // with no trace, which is the worst thing this package can do.
+  it('keeps only the deepest match for an innermost rule', () => {
+    const body = parseBody(
+      '<div class="wrap"><p>See you at four.</p><div class="wrap">Ankur, +91 90000 00000</div></div>',
+    );
+    const applied = applyDomRules(body, [
+      rule({ name: 'card', selectors: ['.wrap'], innermost: true, test: () => true }),
+    ]);
+
+    expect(applied).toEqual(['card']);
+    expect(body.innerHTML).toBe('<div class="wrap"><p>See you at four.</p></div>');
+  });
+
+  // Regression: innermost compares SURVIVORS, not raw matches. An outer element
+  // the guards rejected must not shelter the inner one — the inner is then the
+  // only candidate and has to be removed on its own.
+  it('removes an inner match whose container the guards rejected', () => {
+    const body = parseBody(
+      '<div class="wrap">a very long wrapper<div class="wrap">card</div></div>',
+    );
+    const applied = applyDomRules(body, [
+      rule({ name: 'card', selectors: ['.wrap'], innermost: true, maxTextLength: 10 }),
+    ]);
+
+    expect(applied).toEqual(['card']);
+    expect(body.innerHTML).toBe('<div class="wrap">a very long wrapper</div>');
+  });
+
+  // Regression: two innermost matches that are SIBLINGS are both real — neither
+  // contains the other. A containment filter written as "drop anything another
+  // match sits beside" would take only one of a pair of signature cards.
+  it('removes every innermost match when they do not nest', () => {
+    const body = parseBody('<div><i class="c">one</i><p>hi</p><i class="c">two</i></div>');
+    const applied = applyDomRules(body, [
+      rule({ name: 'card', selectors: ['.c'], innermost: true }),
+    ]);
+
+    expect(applied).toEqual(['card']);
+    expect(body.innerHTML).toBe('<div><p>hi</p></div>');
+  });
+
+  // Regression: an innermost rule that matches nothing must stay out of
+  // `applied` exactly like every other rule. The eager-guard path is a second
+  // code path through the engine, and reporting is easy to get right in only one.
+  it('reports nothing when an innermost rule is vetoed everywhere', () => {
+    const body = parseBody('<div class="wrap">card</div>');
+    const applied = applyDomRules(body, [
+      rule({ name: 'card', selectors: ['.wrap'], innermost: true, test: () => false }),
+    ]);
+
+    expect(applied).toEqual([]);
+    expect(body.innerHTML).toBe('<div class="wrap">card</div>');
   });
 });
