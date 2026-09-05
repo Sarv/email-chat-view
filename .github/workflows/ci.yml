@@ -32,5 +32,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm type-check
-      - run: pnpm test
+      # Coverage rather than a plain test run: the thresholds in
+      # vitest.config.ts are 100% and they only fail the build when the coverage
+      # reporter actually runs. A rule that can delete part of somebody's email
+      # must not reach main with an untested branch — and the README's coverage
+      # badge is only honest while this step is the one that gates the merge.
+      - run: pnpm test:coverage
       - run: pnpm build
