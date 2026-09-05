@@ -53,7 +53,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "media": "pnpm run build && node scripts/media/render.mjs"
   },
   "keywords": [
     "email",
