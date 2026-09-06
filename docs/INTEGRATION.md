@@ -200,7 +200,7 @@ props table:
 | --- | --- | --- |
 | `maxRendered` | `50` | bubbles in the DOM at once; the rest sit behind "show earlier" |
 | `autoScroll` | `true` | jump to the newest message when it changes |
-| `blockRemoteImages` | `true` | remote images are blocked by CSP until you opt in |
+| `blockRemoteImages` | `true` | remote images are blocked by CSP until you opt in; takes a `(message) => boolean` when the answer differs per message |
 | `locale` | the reader's | dates are formatted in the reader's own zone, at render time |
 | `senderRunWindowMs` | `5 min` | consecutive messages from one sender inside this window render compact |
 
@@ -396,7 +396,7 @@ thread's genuine first message. Concatenate in date order afterwards.
 | My own replies appear left-aligned | `currentUserAddress` missing or a different alias | pass every address the user sends from |
 | Cannot find module `email-chat-view/transform` (types) | old `moduleResolution` | set `"bundler"` / `"node16"` |
 | `does not provide an export named 'X'` after an upgrade | your bundler's pre-bundled dep cache is stale — Vite keys it on the lockfile, so a hand-copied `dist/` does not invalidate it | delete `node_modules/.vite` (or run with `--force`) and restart the dev server |
-| Remote images do not load | `blockRemoteImages` defaults to `true` | pass `blockRemoteImages={false}` once you have decided that is safe |
+| Remote images do not load | `blockRemoteImages` defaults to `true`, and it is the view's prop — your own "always load images" setting is not consulted unless you pass it | pass `blockRemoteImages={false}`, or a `(message) => boolean` when the answer depends on the sender or the category |
 | Part of a message vanished | a rule matched real content | see [Why part of my email disappeared](../README.md#why-part-of-my-email-disappeared) — `message.applied` names the rule that cut it |
 
 Every removal is attributable: `message.applied` is an array of rule names such

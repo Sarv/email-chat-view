@@ -75,8 +75,15 @@ export interface MailChatViewProps {
   parser?: HtmlParser;
   /** Sender-run window. `0` gives every message its own header. */
   senderRunWindowMs?: number;
-  /** Withhold network images until the reader asks. Default true. */
-  blockRemoteImages?: boolean;
+  /**
+   * Withhold network images until the reader asks. Default true.
+   *
+   * A predicate instead of a flag when the answer is per message, which it
+   * usually is in a real client: an allowlisted sender, a category that is
+   * trusted, a mail the reader already loaded once. Called for every rendered
+   * message, so keep it cheap — read a `Set`, don't scan the mailbox.
+   */
+  blockRemoteImages?: boolean | ((message: ChatMessage) => boolean);
   onOpenLink?: (url: string) => void;
   onRetryBody?: (message: ChatMessage) => void;
   onPreviewAttachment?: (attachment: Attachment, message: ChatMessage) => void;
@@ -308,7 +315,11 @@ export function MailChatView({
                   locale={locale}
                   now={now}
                   parser={parser}
-                  blockRemoteImages={blockRemoteImages}
+                  blockRemoteImages={
+                    typeof blockRemoteImages === 'function'
+                      ? blockRemoteImages(message)
+                      : blockRemoteImages
+                  }
                   onOpenLink={onOpenLink}
                   onRetryBody={onRetryBody}
                   onPreviewAttachment={onPreviewAttachment}

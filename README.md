@@ -907,6 +907,21 @@ See [Per-bubble actions](#per-bubble-actions-menus-star-reply) for
 `renderActions` / `renderFooter`, and [Paging older
 messages](#paging-older-messages) for the rest.
 
+`blockRemoteImages` defaults to `true` and takes a predicate when the answer is
+per message — which it is in any client with a "load images from this sender"
+allowlist, or a setting that trusts some categories and not others:
+
+```tsx
+<MailChatView
+  messages={messages}
+  blockRemoteImages={(message) => !autoLoadsImagesFor(message.fromAddress)}
+/>
+```
+
+It is called for every rendered message, so read a `Set`, don't scan a mailbox.
+Whatever it returns, the reader still gets the per-message "Load images" link —
+the predicate decides the default, not what they are allowed to do.
+
 The pieces are exported individually for a host that wants its own list:
 `ChatBubble`, `MessageBody`, `SandboxedBody`, `AttachmentChip`, `Avatar`,
 `DateSeparator`, `ChatSkeleton`, `Tooltip`, `RecipientsSummary`. So are the pure

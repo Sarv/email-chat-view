@@ -457,4 +457,54 @@ describe('MailChatView', () => {
     const { container } = renderView({ className: 'app-thread' });
     expect(container.querySelector('.sec-thread')?.className).toBe('sec-thread app-thread');
   });
+
+  describe('blockRemoteImages', () => {
+    /** Two framed messages from different senders, each carrying a remote image. */
+    const remoteImageThread: ChatMessage[] = [
+      chatMessage({
+        id: 'trusted',
+        fromAddress: 'hr@acme.example',
+        body: '<table><tr><td><img src="https://cdn.example/logo.png" alt="logo" /></td></tr></table>',
+      }),
+      chatMessage({
+        id: 'unknown',
+        fromAddress: 'newsletter@promo.example',
+        date: TODAY_AT_TEN + 60_000,
+        body: '<table><tr><td><img src="https://cdn.example/pixel.gif" alt="pixel" /></td></tr></table>',
+      }),
+    ];
+
+    // Regression: the reader turned image loading on in the host's settings, so
+    // a plain `false` has to reach every bubble. Drop it anywhere on the way
+    // down and the library's own "block" default silently wins — the setting
+    // looks broken, which is exactly how this was found.
+    it('honours a plain false for the whole thread', () => {
+      const { container } = renderView({
+        messages: remoteImageThread,
+        blockRemoteImages: false,
+      });
+      expect(container.querySelectorAll('.sec-note--images')).toHaveLength(0);
+    });
+
+    // Regression: a real client's answer is per message, not per thread — one
+    // sender is allowlisted, the next is not. Resolve the predicate once for
+    // the view and both bubbles get the same answer, which is the wrong one
+    // for a message every time the thread has two senders.
+    it('asks the predicate per message and blocks only the ones it names', () => {
+      const asked: string[] = [];
+      const { container } = renderView({
+        messages: remoteImageThread,
+        blockRemoteImages: (message) => {
+          asked.push(message.id);
+          return message.fromAddress !== 'hr@acme.example';
+        },
+      });
+
+      expect(asked).toEqual(['trusted', 'unknown']);
+      const notes = [...container.querySelectorAll('.sec-note--images')];
+      expect(notes).toHaveLength(1);
+      // And it is the bubble whose sender was NOT allowlisted that carries it.
+      expect(notes[0]?.closest('[data-sec-index]')?.getAttribute('data-sec-index')).toBe('1');
+    });
+  });
 });
