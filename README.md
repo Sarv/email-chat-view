@@ -35,8 +35,10 @@ like a chat instead of like fourteen nested copies of itself.
        width="880">
 </p>
 
-**Zero required dependencies.** No React needed for the transform, no DOM
-assumed, no `mode` flag, nothing global. TypeScript throughout, ESM and CJS,
+**Nothing to configure.** No React needed for the transform, no DOM assumed, no
+`mode` flag, nothing global. Three small runtime dependencies come along —
+`dompurify`, `email-addresses`, `chrono-node` — and none of them needs a line of
+setup from you. TypeScript throughout, ESM and CJS,
 and **100% test coverage** — statements, branches, functions and lines, across
 every rule and every engine. The threshold is enforced in CI on three operating
 systems and Node 18/20/22, so a rule cannot land with an untested branch: each
@@ -46,8 +48,13 @@ one of them can silently delete part of somebody's email.
 
 ## Contents
 
+New here? **[docs/INTEGRATION.md](docs/INTEGRATION.md)** is the same material as
+a walkthrough — install, shape your rows, render, and a troubleshooting table
+for the things that go wrong on a first integration. This page is the reference.
+
 - [Install](#install)
 - [Quick start](#quick-start)
+- [The `Mail` shape](#the-mail-shape)
 - [Rendering messages you produced yourself](#rendering-messages-you-produced-yourself) — the AI / bring-your-own path
 - [Per-bubble actions: menus, star, reply](#per-bubble-actions-menus-star-reply)
 - [Examples](#examples)
@@ -190,6 +197,43 @@ a mail is, so anything that produces per-turn content — the transform above, a
 LLM extraction pass, your own parser — feeds the same component. **That is why
 there is no `mode` prop anywhere in this package:** the view renders messages,
 and where they came from is your business.
+
+---
+
+## The `Mail` shape
+
+The `mails` above is a `Mail[]` — a plain object, with **three required fields**
+and a body:
+
+```ts
+import type { Mail } from 'email-chat-view/transform';
+
+const mail: Mail = {
+  id: '1',                            // unique within the thread
+  fromAddress: 'alice@acme.example',  // bare address; display name goes in fromName
+  date: 1740994800,                   // epoch seconds or ms — declare which via dateUnit
+  body: '<p>Hi — are we still on for Tuesday?</p>',
+};
+```
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `string` | **Required.** React key, and what every callback hands back |
+| `fromAddress` | `string` | **Required.** Bare address, no display name |
+| `date` | `number` | **Required.** Unit declared by [`dateUnit`](#dates-say-which-unit-you-have) |
+| `body` | `string \| null` | HTML or plain text. Optional, because metadata arrives before bodies |
+| `fromName` | `string \| null` | Display name, when known |
+| `toAddress` / `ccAddress` | `string \| null` | Comma-separated address lists, as received |
+| `toNames` / `ccNames` | `string \| null` | Display names, positionally matching those lists |
+| `messageId` | `string \| null` | RFC 5322 `Message-ID`; used for de-duplication |
+| `attachments` | `Attachment[]` | `{ filename, sizeBytes?, mimeType?, inline? }` |
+| `bodyPending` | `boolean` | Body still downloading → the bubble shows a spinner |
+| `bodyFailed` | `boolean` | Fetch failed for good → the bubble offers a retry |
+| `isDraft` | `boolean` | Excluded unless you pass `includeDrafts` |
+
+Nothing else is read, so a thin mapper from your own row type is usually the
+whole integration — see the example in
+[the integration guide](docs/INTEGRATION.md#step-2--shape-your-rows-as-mail).
 
 ---
 
@@ -851,6 +895,9 @@ src/
   components/       the React components
   styles/index.css  the --sec-* token layer, compiled to dist/style.css
 test/               one file per module, mirroring src/
+docs/
+  INTEGRATION.md    the beginner walkthrough this README is the reference for
+  media/            the README screenshots, rendered by scripts/media/
 .github/workflows/  ci.yml (every push/PR) and publish.yml (v* tags)
 ```
 
