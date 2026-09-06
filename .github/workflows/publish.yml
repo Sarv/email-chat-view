@@ -17,9 +17,11 @@ on:
       - 'v*'
 
 permissions:
-  # `id-token: write` is what mints the OIDC token npm exchanges for a
-  # provenance attestation — the signed record of which workflow, which commit
-  # and which repo produced the tarball. Without it `--provenance` fails.
+  # `id-token: write` mints the OIDC token, and it now does two jobs: npm
+  # exchanges it for the short-lived credential that AUTHORIZES the publish
+  # (trusted publishing — there is no npm token in this workflow), and it backs
+  # the provenance attestation, the signed record of which workflow, which
+  # commit and which repo produced the tarball. Without it both fail.
   contents: read
   id-token: write
 
@@ -38,8 +40,17 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          # Writes the .npmrc that makes NODE_AUTH_TOKEN work at publish time.
+          # Points npm at the public registry, which is also where the OIDC
+          # exchange happens. No token is written — see the publish step.
           registry-url: 'https://registry.npmjs.org'
+
+      # Node 22 bundles npm 10, and trusted publishing needs npm >= 11.5.1: it
+      # is the version that knows how to exchange the Actions OIDC token for a
+      # short-lived publish credential. On npm 10 the publish falls back to
+      # looking for a token, finds none, and fails with a 401 that says nothing
+      # about OIDC.
+      - name: Use an npm that can do trusted publishing
+        run: npm install -g npm@latest
 
       - run: pnpm install --frozen-lockfile
 
@@ -73,7 +84,18 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+      # No NODE_AUTH_TOKEN, on purpose. This repo is a TRUSTED PUBLISHER on npm
+      # (npmjs.com -> package -> Access), so npm swaps the `id-token: write`
+      # OIDC token above for a credential that lives for the length of this one
+      # publish. Nothing long-lived is stored anywhere, and a leaked secret is
+      # not a thing that can happen to a secret that does not exist.
+      #
+      # Setting NODE_AUTH_TOKEN here would UNDO that: npm takes the token path
+      # whenever a token is present and never attempts the exchange — and an
+      # empty `secrets.NPM_TOKEN` fails the publish outright.
+      #
+      # Provenance is still explicit. Trusted publishing attests it by default,
+      # but the flag is what keeps this working if the publisher is ever
+      # removed and the workflow goes back to a token.
       - name: Publish
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
