@@ -384,6 +384,60 @@
   width: 100%;
 }
 
+/*
+ * A framed body — a newsletter, an approval notice, any mail built as a page.
+ *
+ * It is rendered verbatim, which is the rule: designed mail is not reflowed.
+ * But verbatim means it arrives with its own background and its own margins,
+ * and a bubble that then tints and pads it produces a card inside a card. Two
+ * or three of those in a row from one sender is the "heavy formatting looks
+ * weird" report. So the bubble keeps only what a container owes the document:
+ * an edge, a radius, and the clipping that makes the radius mean something.
+ */
+.sec-bubble--doc {
+  padding: 0;
+  /* Beats the inline sender tint only because the tint is skipped for a
+     document in `ChatBubble`; this covers `--mine`, which is a class. */
+  background: var(--sec-surface);
+  box-shadow: none;
+  /* The document fills the card edge to edge, so the card has to clip it —
+     otherwise its corners square off over the border radius. */
+  overflow: hidden;
+}
+
+/* A document is its own surface, so the reader's own designed mail cannot
+   inherit the brand-filled bubble's ink or its chip treatment. */
+.sec-bubble--doc.sec-bubble--mine {
+  border-color: var(--sec-border);
+  color: var(--sec-bubble-theirs-ink);
+}
+
+.sec-bubble--doc.sec-bubble--mine .sec-chip {
+  border-color: var(--sec-border);
+  background: var(--sec-surface);
+  color: var(--sec-ink);
+}
+
+.sec-bubble--doc.sec-bubble--mine .sec-chip__clip,
+.sec-bubble--doc.sec-bubble--mine .sec-chip__size {
+  color: var(--sec-muted);
+  opacity: 1;
+}
+
+/* Padding came off the bubble, so the parts that are ours rather than the
+   sender's bring their own — and a rule to sit behind, so they read as the
+   frame around the document instead of part of it. */
+.sec-bubble--doc .sec-attachments {
+  margin-block-start: 0;
+  padding: var(--sec-pad);
+  border-block-start: 1px solid var(--sec-border);
+}
+
+.sec-bubble--doc .sec-note--images {
+  margin-block-end: 0;
+  border-radius: 0;
+}
+
 /* The squared corner points back at the avatar, and only on the FIRST bubble of
    a run — which is exactly where the avatar is. */
 .sec-bubble--tail.sec-bubble--theirs {

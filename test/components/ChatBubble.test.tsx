@@ -152,6 +152,40 @@ describe('ChatBubble', () => {
     expect(rich.container.querySelector('.sec-bubble')?.className).toContain('sec-bubble--wide');
   });
 
+  // Regression: a designed mail is rendered verbatim, so it arrives with its
+  // own background. Paint the sender tint behind it and pad it like a chat
+  // line and the reader sees a card inside a card — which is what a heavy HTML
+  // mail looked like. The tint has to be dropped and `--doc` has to be on, or
+  // the stylesheet has nothing to hang the padding removal off.
+  it('drops the sender tint and the bubble padding for a designed mail', () => {
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage({ body: '<table><tr><td>Approve</td></tr></table>' })}
+        color={COLOR}
+        labels={DEFAULT_LABELS}
+        {...FIXED}
+      />,
+    );
+    const bubble = container.querySelector('.sec-bubble') as HTMLElement;
+    expect(bubble.className).toContain('sec-bubble--doc');
+    expect(bubble.style.backgroundColor).toBe('');
+    // The identity colour is not lost, it moves to where it can be seen.
+    expect((container.querySelector('.sec-avatar') as HTMLElement).style.backgroundColor).toBe(
+      COLOR.avatar,
+    );
+  });
+
+  // Regression: `--doc` is the framed-body marker, so an inline reply must
+  // never carry it — a plain bubble with no padding collapses onto its text.
+  it('keeps the tinted, padded bubble for an inline reply', () => {
+    const { container } = render(
+      <ChatBubble message={chatMessage()} color={COLOR} labels={DEFAULT_LABELS} {...FIXED} />,
+    );
+    const bubble = container.querySelector('.sec-bubble') as HTMLElement;
+    expect(bubble.className).not.toContain('sec-bubble--doc');
+    expect(bubble.style.backgroundColor).toBe(COLOR.bubble);
+  });
+
   // Regression: end-to-end cover for the "screenful of blank under the last
   // line" bug. The bubble must render the SHAPE's html, not `message.body` —
   // wire it to the original and the trailing empty wrappers come back, and a

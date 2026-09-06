@@ -117,7 +117,13 @@ export interface ChatBubbleProps {
   onDownloadAttachment?: (attachment: Attachment, message: ChatMessage) => void;
   /** Controls shown at the bubble's outer edge on hover: menus, star, retry. */
   renderActions?: (message: ChatMessage) => ReactNode;
-  /** Anything below the body, inside the bubble: a reply box, an AI notice. */
+  /**
+   * Anything below the body, inside the bubble: a reply box, an AI notice.
+   *
+   * A bubble holding a designed mail carries no padding of its own — the
+   * document reaches the card's edge — so a footer that needs breathing room
+   * has to bring it. Style it against `.sec-bubble--doc` if it must differ.
+   */
   renderFooter?: (message: ChatMessage) => ReactNode;
   className?: string;
 }
@@ -174,10 +180,15 @@ export function ChatBubble({
   );
 
   const attachments = message.attachments ?? [];
+  // A designed mail is not a chat line, it is a finished document: it brings
+  // its own background, its own margins and often its own colour scheme. Tint
+  // and pad it like a bubble and the reader gets a card inside a card. So a
+  // framed body keeps the container and loses the costume.
+  const isDocument = shape.kind === 'rich';
   // A framed body needs a sized containing block, so its bubble takes the full
   // column. A short inline one hugs its text, which is what makes a two-word
   // reply look like a two-word reply.
-  const hug = shape.kind !== 'rich';
+  const hug = !isDocument;
 
   const rowClasses = ['sec-row', isMine ? 'sec-row--mine' : 'sec-row--theirs', className]
     .filter(Boolean)
@@ -187,6 +198,7 @@ export function ChatBubble({
     isMine ? 'sec-bubble--mine' : 'sec-bubble--theirs',
     compact ? '' : 'sec-bubble--tail',
     hug ? '' : 'sec-bubble--wide',
+    isDocument ? 'sec-bubble--doc' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -244,7 +256,10 @@ export function ChatBubble({
           // The audit trail, in the DOM. "Why did part of my email disappear?"
           // is answerable with devtools instead of a rebuild.
           data-sec-applied={message.applied?.length ? message.applied.join(' ') : undefined}
-          style={!isMine && color ? { backgroundColor: color.bubble } : undefined}
+          // The sender tint is skipped for a document: it would sit behind the
+          // mail's own background, visible only as a coloured rim. The avatar
+          // and the sender name above the bubble carry that colour instead.
+          style={!isMine && color && !isDocument ? { backgroundColor: color.bubble } : undefined}
         >
           <MessageBody
             message={message}
