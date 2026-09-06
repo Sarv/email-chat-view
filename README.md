@@ -48,6 +48,8 @@ one of them can silently delete part of somebody's email.
 
 - [Install](#install)
 - [Quick start](#quick-start)
+- [Rendering messages you produced yourself](#rendering-messages-you-produced-yourself) — the AI / bring-your-own path
+- [Per-bubble actions: menus, star, reply](#per-bubble-actions-menus-star-reply)
 - [Examples](#examples)
 - [Running outside a browser](#running-outside-a-browser)
 - [Dates: say which unit you have](#dates-say-which-unit-you-have)
@@ -129,6 +131,45 @@ const messages = mailsToMessages(mails, {
 resolves who each message is from, normalizes every date to epoch milliseconds,
 and cleans each body.
 
+### Messages your mailbox never received
+
+One bubble per mail is right when the store holds every message of the
+conversation. Frequently it does not: a thread forwarded in, a thread joined
+halfway, a colleague's reply pasted into a mail. The only copy of those messages
+is the quoted text inside a mail somebody else sent — render one bubble per mail
+and the conversation has holes in it.
+
+```ts
+import { threadToMessages } from 'email-chat-view/transform';
+
+const messages = threadToMessages(mails, {
+  currentUserAddress: 'me@example.com',
+  dateUnit: 's',
+});
+```
+
+Same signature, same output type, one difference: each body is split at its
+quote boundaries, every quoted message becomes a bubble of its own with the
+sender and date read off its attribution line, and the copies are merged — the
+same message is re-quoted by every later reply, so a five-mail thread yields
+fifteen candidates for five distinct messages.
+
+Three rules decide that merge, and each one is a bug somebody hit:
+
+1. A **real** message — a mail's own segment — is never dropped. It is visible
+   in the plain mail view, so a chat view that hides it makes the two disagree
+   about what arrived.
+2. A **quoted copy** is dropped when its content already appears, whether in a
+   real message or in a copy already kept.
+3. A quote whose attribution line carried no readable date is dated from the
+   mail carrying it and says so, via `ChatMessage.dateApprox`. The view renders
+   that as `~10:04` with "Approximate time" on hover, because an unmarked guess
+   is worse than a guess. Zero would sort it to 1970 and head the thread with
+   it.
+
+A recovered message carries `sourceId` — the mail it was found inside — and an
+id of `<mailId>#<segmentIndex>`, stable as the thread grows.
+
 ### The view
 
 ```tsx
@@ -149,6 +190,135 @@ a mail is, so anything that produces per-turn content — the transform above, a
 LLM extraction pass, your own parser — feeds the same component. **That is why
 there is no `mode` prop anywhere in this package:** the view renders messages,
 and where they came from is your business.
+
+---
+
+## Rendering messages you produced yourself
+
+The transform and the view are two independent halves, and you can take the
+second without the first. `ChatMessage` is the whole contract between them — if
+you can build that array, the view renders it, and none of the splitting or
+cleaning code above runs at all.
+
+This is the path for anything the library deliberately does not do. **It makes
+no network calls and talks to no model**, so an LLM extraction pass, a
+server-side parser, or a corpus-specific splitter of your own lives in your app
+— and then reuses every pixel of the rendering: day separators, sender runs,
+identity colours, the inline-vs-frame decision, sanitisation, the sandboxed
+frame, attachment chips, pending and failed states.
+
+```tsx
+import { MailChatView, type ChatMessage } from 'email-chat-view';
+import 'email-chat-view/style.css';
+
+// Whatever produced these — a model, your own parser, a server endpoint.
+const messages: ChatMessage[] = turns.map((turn) => ({
+  id: turn.id,               // stable and unique; the view keys on it
+  sourceId: turn.emailId,    // the mail it came out of — see below
+  fromAddress: turn.from,
+  fromName: turn.fromName,
+  toAddress: turn.to,
+  date: turn.sentAtMs,       // epoch MILLISECONDS
+  body: turn.html,           // sanitised by the view; you need not pre-clean it
+  isFromMe: turn.from === me,
+  attachments: turn.attachments,
+}));
+
+<MailChatView messages={messages} currentUserAddress={me} />;
+```
+
+Only four fields are required — `id`, `fromAddress`, `date`, `body`. Everything
+else is optional and degrades to a sensible default, though `isFromMe` is the
+one you will always want: it is what right-aligns your own messages, and an
+absent value means "not known", which left-aligns. Left-aligning your own
+message is a cosmetic flaw; right-aligning someone else's attributes their words
+to the reader, so the default is deliberately the harmless direction. Two states
+are worth setting
+explicitly rather than leaving the body empty: `bodyPending: true` renders a
+spinner while a body is still being fetched or extracted, and `bodyFailed: true`
+renders the retry affordance that calls `onRetryBody`. An empty body with
+neither flag renders as a genuinely empty message, which is a real thing mail
+does — that is why the distinction is yours to make.
+
+**Mixing the two is fine and expected.** A host that offers both a deterministic
+view and an extracted one calls `threadToMessages` for the first and its own
+pipeline for the second, then hands whichever array is current to the same
+`<MailChatView>`. There is no flag to set; the component never asks.
+
+### `sourceId`: routing an action back to a real mail
+
+A bubble is not always a mail. `threadToMessages` recovers messages that exist
+only as quotes inside other mails, and an extraction pass can carve several
+turns out of one bottom-quoted email. Those bubbles have no row of their own in
+your store, so `message.id` will not find one.
+
+`message.sourceId` is the mail they came out of. Route every action through it:
+
+```ts
+const emailFor = (message: ChatMessage) => store.get(message.sourceId ?? message.id);
+```
+
+`sourceId` is absent when the bubble *is* a whole mail, which is why the
+fallback to `id` is part of the idiom rather than an edge case.
+
+---
+
+## Per-bubble actions: menus, star, reply
+
+The view ships no actions of its own — a star, a three-dot menu and a reply
+button are your product's decisions, wired to your store, with your icons and
+your permissions. What the view provides is the **slot**, correctly positioned
+and correctly revealed:
+
+```tsx
+<MailChatView
+  messages={messages}
+  renderActions={(message) => {
+    const email = emailFor(message);         // sourceId ?? id, as above
+    if (!email) return null;                 // a bubble with no row: no actions
+    return (
+      <>
+        <StarButton email={email} />
+        <OverflowMenu
+          onReply={() => reply(email)}
+          onForward={() => forward(email)}
+          onDelete={() => remove(email.id)}
+        />
+      </>
+    );
+  }}
+  renderFooter={(message) => (replyingTo === message.id ? <InlineReply /> : null)}
+/>
+```
+
+| Prop | Where it renders |
+| --- | --- |
+| `renderActions(message)` | at the bubble's **outer edge**, outside the bubble box — left of your own messages, right of everyone else's. Hidden at `opacity: 0`, revealed on row `:hover` **and on `:focus-within`**, so it is reachable by keyboard, not just by mouse |
+| `renderFooter(message)` | **inside** the column, below the body — for something that belongs to the message rather than acting on it: an inline reply box, a translation notice, an extraction warning |
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sarv/email-chat-view/main/docs/media/render-slots.png"
+       alt="The same thread with both slots filled: a star and a three-dot menu at the outer edge of each row — right of Alice's message, mirrored to the left of the reader's own — and an inline reply box under Carol's attachment chip"
+       width="940">
+</p>
+
+The controls in that picture are not the library's; they are a `<StarButton>`
+and an `<OverflowMenu>` handed to `renderActions`, and a reply box handed to
+`renderFooter`. The view only decides **where** they land and **when** they
+appear — note the star sitting on the right of Alice's row and on the left of
+the reader's own, because the slot follows the side the bubble is on. Pass
+neither prop and none of it renders: you get the thread and nothing else.
+(They are hidden until hover or keyboard focus; the picture forces them visible.)
+
+Both are called per message and may return `null` — that is the correct answer
+for a recovered quote with no underlying mail to act on. The row is
+`position: relative` and the hovered row is lifted to `z-index: 1`, so controls
+hanging outside the column are never painted over by the next bubble.
+
+Four more callbacks cover the affordances the view *does* draw, because it knows
+when they were clicked and you know what to do about it: `onOpenLink`,
+`onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment`. The library never
+fetches, never navigates and never mutates anything — it reports, you act.
 
 ---
 
@@ -280,6 +450,11 @@ messages does not retain every body it ever rendered.
 
 For a single message — a retry, one arriving body — `mailToMessage` transforms
 one mail without touching the rest of the thread.
+
+`threadToMessages` takes a `createSegmentCache()` in exactly the same place, and
+wants one more: splitting is the most expensive thing this package does — a
+parse, a boundary sweep and a clean per segment — so without a cache every
+newly arrived body re-splits every body already on screen.
 
 ### Paging older messages
 
@@ -413,9 +588,19 @@ marker rule tested against prettier input than the wild produces is a rule that
 does not fire: real clients HTML-escape addresses as `&lt;bob@x.com&gt;`, and a
 pattern written against `<bob@x.com>` matches the fixture and nothing else.
 
-The other three kinds:
+The other three kinds — `LineRule`, `MarkerRule`, `DisclaimerRule`:
 
 ```ts
+// A convention with no container to select — it exists only as a standalone
+// visual LINE. This is the shipped `mobileFooterLine` rule.
+const line: LineRule = {
+  name: 'mobile-footer',
+  provider: 'Common / mobile clients',
+  pattern: /^(sent from my |get outlook for |sent via |sent from )/i,
+  maxLineLength: 60,               // REQUIRED, no default — see below
+  action: 'cut',                   // 'cut' = this line and everything after it
+};
+
 // Prose boundary: everything from the match onward is history. This is the
 // shipped `wroteAttribution` rule.
 const marker: MarkerRule = {
@@ -439,6 +624,15 @@ const disclaimer: DisclaimerRule = {
   minTextLength: 120,              // default 120 — shorter than this is a sign-off
 };
 ```
+
+`maxLineLength` is the load-bearing part of a line rule, which is why it has no
+default: it is the only thing between the rule and the paragraph it will
+otherwise eat. "Sent from my phone I could not reach you earlier, so…" is a
+sentence, not a footer, and the cap is what tells them apart. `pattern` is
+tested against the line's text already trimmed and with whitespace collapsed, so
+anchor with `^` freely. Prefer `action: 'line'` — `'cut'` takes the rest of the
+message with it when it misfires, so it is only for a convention that genuinely
+*terminates* a message.
 
 `opens` is the load-bearing part of a disclaimer rule. It anchors to the
 **start** of the block's text, so a paragraph that merely mentions
@@ -499,8 +693,9 @@ tunable rather than mysterious.
 
 ## API
 
-Everything below is exported from `email-chat-view/transform` and, for
-convenience, from the package root.
+Everything below except [the view](#view) is exported from
+`email-chat-view/transform` and, for convenience, from the package root. The
+view is root-only: importing it pulls in React.
 
 ### Transform
 
@@ -509,33 +704,71 @@ convenience, from the package root.
 | `mailsToMessages(mails, options?)` | `Mail[]` → `ChatMessage[]`: sorted, drafts dropped, dates normalized, bodies cleaned |
 | `mailToMessage(mail, context)` | one mail, for a retry or a single arriving body |
 | `createBodyCache(capacity?)` | LRU memo keyed on `(id, body)`. Default capacity 500 |
-| `cleanReplyBody(html, options?)` | all four passes → `{ html, applied }` |
-| `stripSignature` / `stripQuote` / `stripMarkers` / `stripDisclaimer` | one family each |
+| `threadToMessages(mails, options?)` | the same, but the messages quoted INSIDE those mails become bubbles too |
+| `createSegmentCache(capacity?)` | LRU memo for split bodies, keyed on `(id, body)` |
+| `contentKey(html)` | the normalized key two copies of one message collapse on |
+| `cleanReplyBody(html, options?)` | all seven passes, one parse → `{ html, applied }` |
+| `stripSignature` / `stripBanner` / `stripQuote` / `stripLines` / `stripSignOff` / `stripMarkers` / `stripDisclaimer` | one family each, for a corpus that wants six of the seven |
 
 `MailsToMessagesOptions`: `parser`, `currentUserAddress` (string or array),
 `dateUnit`, `cache`, `includeDrafts`, plus any `cleanReplyBody` option
-(`signatureRules`, `quoteRules`, `markerRules`, `disclaimerRules`,
-`keepQuotedHistory`).
+(`signatureRules`, `bannerRules`, `lineRules`, `quoteRules`, `markerRules`,
+`disclaimerRules`, `keepSignOff`, `keepQuotedHistory`).
+
+`ThreadToMessagesOptions`: those same five, plus `segment` and `solo`
+(`CleanFragmentOptions` for a quoted segment, and for a body with no quotes in
+it) and `refDate`.
 
 The thread's **oldest** message keeps its quoted history automatically: it has
 no history behind it, so there is nothing to cut and only genuine content a
 quote pass could damage.
 
+### Splitting a thread
+
+The parts under `threadToMessages`. Exported because a client whose attribution
+shape the three detectors do not recognise is a real possibility, and composing
+a detector out of these beats forking the file.
+
+| Export | Description |
+| --- | --- |
+| `splitMailBody(html, options?)` | one body → `BodySegment[]`, newest first |
+| `findBoundaries(body, refDate?)` | ordered, non-overlapping quote boundaries in a parsed body |
+| `parseAttribution(line, refDate?)` | `On <date>, <someone> wrote:` → `{ name, email, date }` |
+| `parseHumanDate(text, refDate?)` | a human-written date → epoch ms, day-first, or null |
+| `cleanFragment(node, options?)` | clean a segment already carved out of a body — it UNWRAPS quote containers instead of removing them |
+| `sliceBetween` / `removeFromNodeOnward` / `removeUpToNodeInclusive` | cut a tree between two nodes, without `Range` |
+| `pathTo` / `nodeAtPath` / `comparePaths` / `isPathPrefix` | child-index paths: document order without `compareDocumentPosition` |
+
+`BodySegment` is `{ attribution, isOwn, html, applied }`. `isOwn` is stated
+rather than inferred from the position: a segment that cleans away to nothing is
+dropped, and after that the first segment is not necessarily the sender's own.
+
+`refDate` matters more than it looks. Attribution lines are full of relative
+dates ("On Monday", "Yesterday at 4pm"), and resolved against the reader's clock
+rather than against the mail that carried them, a quote in an old thread gets
+dated *after* the reply quoting it — the conversation then renders in reverse.
+`threadToMessages` passes each mail's own send time for you, and refuses any
+attribution date later than its carrier.
+
 ### Rules
 
-`signatureRules`, `quoteRules`, `markerRules`, `disclaimerRules` — the default
-sets. Every individual rule is exported too (`gmailQuote`, `bareBlockquote`,
-`outlookModernQuote`, `wroteAttribution`, `englishDisclaimer`, …), so composing
+`signatureRules`, `bannerRules`, `quoteRules`, `lineRules`, `markerRules`,
+`disclaimerRules` — the default sets, plus `minimalLineRules` (the two the
+thread splitter uses on a body with no quotes in it). Every individual rule is
+exported too (`gmailQuote`, `bareBlockquote`, `outlookModernQuote`,
+`wroteAttribution`, `mobileFooterLine`, `englishDisclaimer`, …), so composing
 your own set is array-literal syntax, not an API.
 
-Types: `DomRule`, `MarkerRule`, `DisclaimerRule`, `StripOptions`, `StripResult`.
+Types: `DomRule`, `LineRule`, `MarkerRule`, `DisclaimerRule`, `StripOptions`,
+`StripResult`.
 
 ### Engines
 
-`applyDomRules(root, rules)`, `applyMarkerRules(html, rules)`,
-`applyDisclaimerRules(root, rules)` — run one pass over a document you have
-already parsed, with no serialize/reparse round trip. `applyDomRules` accepts a
-**detached** subtree, so you can strip inside a fragment.
+`applyDomRules(root, rules)`, `applyLineRules(root, rules)`,
+`applyMarkerRules(html, rules)`, `applyDisclaimerRules(root, rules)`,
+`cutSignOff(root)` — run one pass over a document you have already parsed, with
+no serialize/reparse round trip. `applyDomRules` accepts a **detached** subtree,
+so you can strip inside a fragment.
 
 ### Classification
 
@@ -554,6 +787,38 @@ already parsed, with no serialize/reparse round trip. `applyDomRules` accepts a
 unglamorous, but a contributed rule's `test` hook needs them, and
 re-implementing "does this element have meaningful children" per rule is exactly
 how the hand-rolled strippers this package replaces drifted apart.
+
+### View
+
+From the package **root** only — importing these pulls in React, which is why
+they are not on the `/transform` entry.
+
+`MailChatView` is the composed thread. Its props, grouped by what they are for:
+
+| Group | Props |
+| --- | --- |
+| **Data** | `messages` (the only required one), `currentUserAddress`, `locale`, `now`, `parser` |
+| **Your UI** | `renderActions(message)`, `renderFooter(message)`, `emptyState`, `labels`, `className` |
+| **Your handlers** | `onOpenLink`, `onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment` |
+| **Paging & scale** | `hasOlder`, `onLoadOlder`, `loadingOlder`, `onVisibleRangeChange`, `maxRendered`, `autoScroll`, `loading` |
+| **Presentation** | `senderRunWindowMs`, `blockRemoteImages` |
+
+See [Per-bubble actions](#per-bubble-actions-menus-star-reply) for
+`renderActions` / `renderFooter`, and [Paging older
+messages](#paging-older-messages) for the rest.
+
+The pieces are exported individually for a host that wants its own list:
+`ChatBubble`, `MessageBody`, `SandboxedBody`, `AttachmentChip`, `Avatar`,
+`DateSeparator`, `ChatSkeleton`, `Tooltip`, `RecipientsSummary`. So are the pure
+helpers behind them — `groupMessagesByDate`, `isSameSenderRun`,
+`buildSenderColorMap`, `resolveSenderColor`, `inspectBody`, `bubbleTimestamp`,
+`describeRecipients`, `parseAddressList`, `formatFileSize`, `isPreviewable`,
+`sanitizeInlineHtml`, `sanitizeFrameHtml`, `buildFrameDocument` — because the
+interesting decisions should be testable and reusable without rendering
+anything.
+
+`DEFAULT_LABELS` / `resolveLabels` cover every string the view can render;
+pass `labels` to translate or reword any of them.
 
 ### Data contract
 
@@ -576,8 +841,11 @@ src/
   view.ts           React entry — components and the pure UI helpers
   types.ts          the public data contract: Mail, ChatMessage, Attachment
   dom.ts            injectable HTML parser (resolveParser, NoDomParserError)
-  rules/            provider conventions AS DATA — signature/quote/marker/disclaimer
-  transform/        the engines that apply those rules, and mailsToMessages
+  rules/            provider conventions AS DATA — signature, banner, quote,
+                    line, sign-off, marker, disclaimer
+  transform/        the engines that apply those rules to ONE body, and mailsToMessages
+  thread/           one bubble per MESSAGE: quote boundaries, attribution lines,
+                    human dates, and threadToMessages
   classify/         automated-vs-conversational scoring
   ui/               pure view logic: dates, colours, grouping, sanitize, frame
   components/       the React components
@@ -586,10 +854,13 @@ test/               one file per module, mirroring src/
 .github/workflows/  ci.yml (every push/PR) and publish.yml (v* tags)
 ```
 
-A file-by-file map — what each module owns and why it is separate — is in
-[CONTRIBUTING.md](./CONTRIBUTING.md#the-map), next to the guide for changing
-them. Every source file also opens with a docblock stating the decision it
-encodes, so the file itself is the second place to look.
+Two deeper reads, both in [CONTRIBUTING.md](./CONTRIBUTING.md): a
+[stage-by-stage walkthrough](./CONTRIBUTING.md#the-pipeline-end-to-end) of what
+happens to a raw mail on its way to a bubble — split, clean, merge, group,
+render, and why that order is load-bearing — and a
+[file-by-file map](./CONTRIBUTING.md#the-map) of what each module owns and why
+it is separate. Every source file also opens with a docblock stating the
+decision it encodes, so the file itself is the second place to look.
 
 ---
 
@@ -597,11 +868,23 @@ encodes, so the file itself is the second place to look.
 
 ```sh
 pnpm install
+pnpm verify         # lint + format:check + type-check + coverage — what CI gates on
 pnpm test           # vitest, Node environment, linkedom injected
 pnpm test:coverage  # enforced at 100% lines AND branches
 pnpm type-check
+pnpm lint           # ESLint; pnpm lint:fix to autofix
+pnpm format         # Prettier; pnpm format:check to verify
 pnpm build          # ESM + CJS + .d.ts/.d.cts + dist/style.css
 ```
+
+ESLint and Prettier are not advisory — both run as a CI job on every pull
+request, and `.editorconfig` lines your editor up with them before either runs.
+Prettier owns formatting outright; ESLint owns the correctness rules a reviewer
+would otherwise have to catch by eye (a relative import missing its `.js`
+extension, an unbounded quantifier facing a mail body, a hook with an incomplete
+dependency list). Each rule is commented where it is declared, and
+[CONTRIBUTING.md](./CONTRIBUTING.md#code-style) explains the ones most likely to
+stop a first PR.
 
 The coverage threshold is 100% and enforced, not aspirational. Every rule in
 here can silently delete part of somebody's email, so an untested branch is not

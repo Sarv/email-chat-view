@@ -17,6 +17,7 @@ one test case**, and never open the engine at all.
 - [What helps most](#what-helps-most)
 - [Getting set up](#getting-set-up)
 - [Examples](#examples)
+- [The pipeline, end to end](#the-pipeline-end-to-end) — raw mail to bubble, stage by stage
 - [The map](#the-map) — what every file is for
 - [How a body is cleaned](#how-a-body-is-cleaned)
 - [Adding a rule](#adding-a-rule)
@@ -68,19 +69,24 @@ pnpm test
 
 | Script | What it does |
 | --- | --- |
+| `pnpm verify` | **lint + format:check + type-check + coverage** — everything CI gates on |
 | `pnpm test` | Vitest, once. Node environment, linkedom injected |
 | `pnpm test:watch` | the same, watching |
 | `pnpm test:coverage` | coverage, **enforced at 100%** lines/branches/functions/statements |
 | `pnpm type-check` | `tsc --noEmit` over `src`, `test` **and** `examples` |
+| `pnpm lint` / `pnpm lint:fix` | ESLint — see [Code style](#code-style) |
+| `pnpm format` / `pnpm format:check` | Prettier, over everything but Markdown |
 | `pnpm build` | tsup → ESM + CJS + `.d.ts`/`.d.cts` + `dist/style.css` |
 | `pnpm dev` | build in watch mode |
 | `pnpm clean` | remove `dist/` |
-| `pnpm media` | rebuild, then regenerate the README GIF and screenshots — see [README media](#readme-media) |
+| `pnpm media` | rebuild, then regenerate every README image — `media:render` and `media:actions` do one group each, see [README media](#readme-media) |
 
-CI runs `type-check`, `test:coverage` and `build` on Ubuntu, macOS and Windows
-against Node 18, 20 and 22 — coverage rather than a plain test run, because the
-100% thresholds only bite when the coverage reporter runs. Run those three
-locally before pushing and there should be no surprises.
+CI runs two jobs. `lint` runs ESLint and the Prettier check once, on one
+platform — the answer cannot differ across a matrix. `test` runs `type-check`,
+`test:coverage` and `build` on Ubuntu, macOS and Windows against Node 18, 20
+and 22 — coverage rather than a plain test run, because the 100% thresholds
+only bite when the coverage reporter runs. `pnpm verify` locally is the same
+set, and there should then be no surprises.
 
 To try a change inside a real app, point the app at your checkout:
 
@@ -112,11 +118,122 @@ by hand after `pnpm build` when you touch what they use.
 
 ---
 
+## The pipeline, end to end
+
+Read this before [the map](#the-map). The map says where things live; this says
+what happens, in order, to a raw mail on its way to a bubble. Almost every bug
+filed against this library is a stage doing something the stage before it had
+already decided, so the order below is not incidental — it is the design.
+
+```text
+  Mail[]  (the host's rows, described once at the boundary)
+    |
+    |  [1] SPLIT      thread/boundaries.ts  ->  thread/split-body.ts
+    |                 one body -> N segments, cut at attribution lines.
+    |                 NOTHING is stripped yet.
+    v
+  BodySegment[]  per mail  ({ attribution, isOwn, html, applied })
+    |
+    |  [2] CLEAN      transform/fragment.ts  (or transform/strip.ts)
+    |                 per SEGMENT: signature, banner, line, sign-off,
+    |                 disclaimer. Quote wrappers are UNWRAPPED, not removed.
+    v
+  candidate messages  (~n^2/2 of them: every reply re-quotes the same message)
+    |
+    |  [3] MERGE      thread/thread-to-messages.ts
+    |                 contentKey() collapses the copies; reals always win;
+    |                 dateless quotes get an approximate date.
+    v
+  ChatMessage[]  <-- what `email-chat-view/transform` returns. No React, no DOM
+    |             assumed, safe in Node.
+    |  [4] GROUP     ui/grouping.ts, ui/sender-colors.ts, ui/dates.ts
+    |  [5] RENDER    ui/body-shape.ts -> ui/sanitize.ts -> inline or ui/frame.ts
+    v
+  the view
+```
+
+**[0] The boundary — `Mail[]`.** The host describes its storage shape exactly
+once: addresses, a date, a body, attachments, `isDraft`. `dateUnit: 's'` at this
+boundary is converted a single time, in `transform/mail-fields.ts`; nothing
+downstream ever sees seconds. Everything after this point is the library's.
+
+**[1] Split — no stripping first.** A reply carries the whole conversation
+inside it, each older message introduced by an `On <date>, <someone> wrote:`
+line. `findBoundaries` locates those lines at **line** precision (an attribution
+is as often bare text between two `<br>`s as it is a `.gmail_attr` element), and
+`splitMailBody` slices the regions between them.
+
+The rule that costs the most to relearn: **nothing is stripped before the
+split.** A signature sweep over the whole body deletes the quoted headers the
+boundary detector navigates by, and a nine-message thread collapses into two
+bubbles. A body with *no* boundaries is not a conversation — it is one message,
+and it gets the minimal chain instead, because running the structural passes
+over a designed mail (a task-tracker notification whose content sits in an
+inline-styled blockquote) returns a wireframe.
+
+**[2] Clean — per segment, and unwrapping rather than removing.** Now every
+segment is somebody's real words, so `cleanFragment` **peels** a quote wrapper
+and keeps its contents, where `cleanReplyBody` would delete them. It also
+removes the attribution line, which the splitter already consumed into the
+bubble's sender and timestamp — left in place it renders twice. What each pass
+removed is recorded in `applied` as `family:name`; nothing is ever removed
+silently. The single-body pass is detailed in
+[How a body is cleaned](#how-a-body-is-cleaned).
+
+**[3] Merge — the copies collapse, the originals never do.** The same message is
+quoted again by every later reply, so a five-mail thread produces roughly
+fifteen candidates for five distinct messages. `contentKey()` normalizes the
+first ~150 characters of a segment into a comparison key, and three rules decide
+the merge — each one a bug someone actually hit:
+
+1. A **real** message (a mail's own segment) is never dropped. Not for an empty
+   key, not for a collision. It is visible in the plain mail view, and a chat
+   view that hides it makes the two disagree about what arrived.
+2. A **quoted** copy is dropped when its content already appears anywhere — in a
+   real message, or in a quoted copy already kept.
+3. A quote with **no readable date** is dated from the mail carrying it and says
+   so (`dateApprox`, rendered with a `~`). Zero would sort it to 1970 and put
+   the oldest-looking bubble at the top of every thread.
+
+Drafts are dropped and the mails sorted oldest-first *before* stage [1] — an
+unsent draft has nothing to contribute to a thread's history, and splitting it
+would seed candidates for messages that were never sent. After the merge, scan
+order is the tiebreak between two messages sharing a timestamp, and a message
+whose date is unreadable keeps its `NaN` and sorts last, so the view can group
+it honestly rather than pretending it happened in 1970.
+
+**[4] and [5] — the view.** `ChatMessage[]` is the seam: everything above runs
+in Node, everything below needs React. Messages are grouped into days and sender
+runs, given stable per-participant colours, and then each body is asked one
+question by `ui/body-shape.ts` — *is this a few sentences, or a document?* Text
+renders inline in the bubble under a narrow DOMPurify allowlist; a real document
+renders in a sandboxed iframe under the wider policy, because its own CSS would
+otherwise leak into the host app.
+
+**Two entry points into all of this.** `threadToMessages` is the pipeline above.
+`mailsToMessages` skips stages [1] and [3] entirely — one bubble per mail,
+quoted history thrown away by `cleanReplyBody` — which is correct only when the
+store already holds every message of the conversation.
+
+**`src/classify/` is not in this pipeline.** It answers a different question — is
+this mail conversational or automated? — and is exported for a host deciding
+whether to *offer* a chat view at all. Nothing in the transform calls it.
+
+---
+
 ## The map
 
 Three layers, and the boundaries between them are the whole design: the
 transform must not need React, the view must not need to know what a mail is,
 and the provider conventions must be data rather than code.
+
+Inside the transform there is a second, narrower boundary worth knowing before
+you read anything: `src/transform/` cleans **one body**, and `src/thread/`
+reasons about **a whole thread** — the messages that exist only as quotes inside
+other mails, and who said what when. A pass that deletes a blockquote is correct
+in a thread (it is history, already present as its own message) and destructive
+in a fragment (it is the only copy of that message). Keeping the two directories
+apart is what stops that mistake from being one careless import away.
 
 ### Entry points
 
@@ -135,22 +252,48 @@ never read an engine. That is why these are separate from `src/transform/`.
 
 | File | Contains |
 | --- | --- |
-| `rules/types.ts` | the three rule contracts: `DomRule`, `MarkerRule`, `DisclaimerRule`. Read this first |
+| `rules/types.ts` | the four rule contracts: `DomRule`, `LineRule`, `MarkerRule`, `DisclaimerRule`. Read this first |
 | `rules/signature.ts` | signature containers — Gmail, Apple Mail, Thunderbird, Outlook mobile/desktop, a guarded generic |
 | `rules/quote.ts` | quoted-history containers — `.gmail_quote`, `blockquote[type=cite]`, Thunderbird, Outlook classic and OWA, a bare-`<blockquote>` catch-all |
+| `rules/banner.ts` | gateway-injected warning banners ("This message came from outside your organisation"), in the three shapes they arrive as: a styled box, a line inside a larger block, and a standalone line |
+| `rules/line.ts` | conventions that exist as a standalone visual **line** rather than a container — `--` separators, "Sent from my iPhone", tracking footers. Order only decides which rule gets the credit, never whether the line goes |
+| `rules/sign-off.ts` | the patterns for human-typed closings — "Thanks", "Best regards", "Cheers, Alice" — plus the job-title pattern that corroborates them. Deliberately apart from `line.ts` because its engine (`transform/sign-off.ts`) takes the **last** match and guards on block size, share of the message and corroborating evidence: a sign-off is prose, and cutting the wrong one deletes the sender's words |
 | `rules/marker.ts` | prose boundaries — `On … wrote:`, forwarded banners, `-----Original Message-----`, the Outlook `From:/Sent:/To:` block. **All English today** |
 | `rules/disclaimer.ts` | trailing legal boilerplate, matched on weighted evidence rather than one phrase |
 
-### `src/transform/` — the engines
+### `src/transform/` — the engines, for ONE body
 
 | File | Owns |
 | --- | --- |
+| `transform/strip.ts` | the public strip API. `cleanReplyBody` parses **once** and hands the same tree to every DOM pass — see [How a body is cleaned](#how-a-body-is-cleaned) |
 | `transform/apply-dom-rules.ts` | runs `DomRule`s over a parsed tree: selector match, `maxTextLength` guard, `test` veto, `boundary` sibling removal |
+| `transform/apply-line-rules.ts` | runs `LineRule`s over the tree's **text nodes**, for conventions with no container to select. A rule either cuts everything from its line down (`'cut'`) or removes just that line (`'line'`) |
 | `transform/apply-marker-rules.ts` | truncates the serialized HTML at the **earliest** match across all marker rules, so rule order can never change another rule's result |
 | `transform/apply-disclaimer-rules.ts` | the two disclaimer strategies — after an `<hr>`, and the trailing-block walk |
+| `transform/sign-off.ts` | the sign-off pass: find the sender's own closing block and cut from it down, under the last-match-wins guards described in `rules/sign-off.ts` |
+| `transform/block-shapes.ts` | predicates for rules whose marker is a block's **shape** rather than a selector — the anonymous warning-box `<table>`, the graphical contact card, the brand logo strip. Nothing in their markup says what they are, so `DomRule.test` asks these instead. Each is a factory taking its own thresholds, so the numbers stay in the rule object |
 | `transform/node-utils.ts` | `normalizedText`, `meaningfulChildren`, `safeMatches`, `safeQueryAll` … the shared answer to "which children actually count?". Every pass uses these so they cannot drift apart |
-| `transform/strip.ts` | the public strip API. `cleanReplyBody` parses **once** and hands the same tree to every DOM pass |
-| `transform/mails-to-messages.ts` | `Mail[]` → `ChatMessage[]`: sort, drop drafts, resolve sender, normalize dates, clean bodies, and the LRU body cache keyed on `(id, body)` |
+| `transform/dom-text.ts` | flattening an element to text **with its line structure intact**. `textContent` glues adjacent `<div>`s into one run, which silently merges two lines a line rule was meant to see separately |
+| `transform/dom-slice.ts` | taking the content between two nodes without DOM `Range` — unavailable outside a browser, and this code has to run in Node |
+| `transform/html-space.ts` | whitespace, blank-block removal, and the "is this a designed document?" question that decides bubble vs. frame |
+| `transform/fragment.ts` | cleaning ONE fragment already known to be a single message. The structural passes **unwrap** here where the reply cleaner **removes** — a quote wrapper and an indent bar are peeled and their contents kept, because after the split those contents *are* the segment. Deleting a blockquote here would delete a message |
+| `transform/mail-fields.ts` | reading a `Mail`'s fields one way — sender, recipients, date, draft flag — so `mailsToMessages` and `threadToMessages` cannot disagree about the same input |
+| `transform/lru-cache.ts` | the bounded memo every per-message transform needs, keyed on content so a re-render is free and a changed body is not |
+| `transform/mails-to-messages.ts` | `Mail[]` → `ChatMessage[]` **one bubble per mail**: sort, drop drafts, resolve sender, normalize dates, clean bodies. The simple transform — use `src/thread/` when quoted history should become messages of its own |
+
+### `src/thread/` — one bubble per MESSAGE, not per mail
+
+The deterministic split. A mail is not a message: a three-reply thread where you
+only hold the last mail still contains all three, quoted inside it, and a reader
+wants three bubbles. This directory recovers them.
+
+| File | Owns |
+| --- | --- |
+| `thread/thread-to-messages.ts` | `threadToMessages` — the whole-thread transform, and the merge rules that decide when a recovered quote is the same message as a mail you already hold (so it is dropped rather than duplicated) |
+| `thread/split-body.ts` | splitting ONE body into the messages quoted inside it: walk the boundaries, slice between them, clean each slice as a fragment |
+| `thread/boundaries.ts` | finding those boundaries inside a single body — at **line** precision, not element precision, because an attribution is as often a bare run of text between two `<br>`s as it is its own `.gmail_attr` element |
+| `thread/attribution.ts` | reading an `On <date>, <someone> wrote:` line into a sender and a date. The one parser for it; the app-side copy this replaced is why two views could disagree about who wrote what |
+| `thread/human-date.ts` | a human-written date to epoch **milliseconds**, via chrono-node's day-first locale, anchored on the carrying mail so relative expressions ("yesterday") resolve to the right day |
 
 ### `src/classify/`
 
@@ -194,7 +337,7 @@ rendering anything.
 | `src/styles/index.css` | the `--sec-*` token layer, compiled to `dist/style.css` |
 | `test/` | one file per module, mirroring `src/`; `test/helpers/` holds the linkedom parser, message fixtures and observer stubs |
 | `examples/` | runnable Node examples and a React reference integration, type-checked with the rest — see [Examples](#examples) |
-| `scripts/media/` | the README media generator: `thread.mjs` is the demo thread, `render.mjs` renders and screenshots it — see [README media](#readme-media) |
+| `scripts/media/` | the README media generators: `thread.mjs` is the demo thread, `render.mjs` draws the GIF and stills, `actions.mjs` draws the render-slot callouts, `chrome.mjs` is the shared headless-Chrome shooter and `dom-globals.mjs` the jsdom globals both need — see [README media](#readme-media) |
 | `docs/media/` | the generated GIF and screenshots the README links to, plus the Sarv lockup used to watermark them |
 | `tsup.config.ts` | the build: two JS entries plus a CSS entry, ESM + CJS + types |
 | `vitest.config.ts` | Node environment by default, coverage thresholds |
@@ -209,17 +352,42 @@ the argument you have to answer — and if you change the behaviour, update it.
 
 ## How a body is cleaned
 
-`cleanReplyBody` runs four passes in a fixed order:
+`cleanReplyBody` runs seven passes in a fixed order:
 
 ```text
-signature rules  →  quote rules  →  marker rules  →  disclaimer rules
-   (selector)       (selector)      (regex cut)      (weighted evidence)
+signature  →  banner  →  quote  →  line  →  sign-off  →  marker  →  disclaimer
+(selector)  (selector) (selector) (text node) (last match) (regex cut) (weighted evidence)
+|------------------------- one parsed tree -------------------------|  |-- reparse --|
 ```
 
-The order is load-bearing. The disclaimer pass is the only one that reasons
-about the *trailing edge* of a message, so it has to run after the marker pass
-has cut the plain-text history off the end — otherwise the footer sits buried
-mid-document where the trailing-block walk never looks.
+The first five share a single parse — the same tree is handed to each, where
+calling the exported per-family functions in sequence would reparse the body
+five times. On a 200-message thread that difference is the whole cost. Only the
+marker pass works on serialized HTML, and only if it actually cut something does
+the disclaimer pass need the second parse; when no marker fires, the tree from
+the first parse still *is* that HTML and is reused.
+
+The order is load-bearing:
+
+- **Selectors before text.** A `--` inside a signature container is removed with
+  the container; the line pass should only ever see lines nothing else claimed.
+- **Sign-off after quote.** "Thanks, Alice" appears once per quoted reply. Cut
+  the history first and there is exactly one sign-off left to find — the
+  sender's own, at the bottom, which is what the last-match rule assumes.
+- **Disclaimer last.** It is the only pass that reasons about the *trailing edge*
+  of a message, so it has to run after the marker pass has cut the plain-text
+  history off the end — otherwise the footer sits buried mid-document where the
+  trailing-block walk never looks.
+
+Two options change the shape of the run. `keepQuotedHistory` (what the thread
+splitter passes for the oldest message in a thread) skips the quote pass and
+returns straight after sign-off: there is no history behind the first message,
+so nothing for a marker to truncate, and its disclaimer is already at the
+trailing edge of the tree in hand. `keepSignOff` skips the sign-off pass alone.
+
+If the parse itself fails, the string-only marker pass still runs. A body we
+could not parse should at least lose its plain-text quote boundary — degrading
+beats showing the entire thread history in one bubble.
 
 Every rule that actually removed something is reported in
 `ChatMessage.applied` as `family:name`. Nothing is ever removed silently.
@@ -243,9 +411,14 @@ when the rule is going upstream rather than into your own app.
 [writing]: ./README.md#writing-your-own-rule
 
 **1. Put it in the right file, and export it.** `src/rules/signature.ts`,
-`quote.ts`, `marker.ts` or `disclaimer.ts`. Export the rule on its own *and* add
-it to the default array — the individual export is what lets a consumer drop or
-reorder it without forking.
+`banner.ts`, `quote.ts`, `line.ts`, `sign-off.ts`, `marker.ts` or
+`disclaimer.ts` — pick by what the convention *is in the markup*, not by what it
+means. A block you can select is a `DomRule` (signature, banner, quote); a
+standalone visual line with no container of its own is a `LineRule`; a prose
+boundary that ends the message is a `MarkerRule`; trailing legal boilerplate is
+a `DisclaimerRule`. Export the rule on its own *and* add it to the default array
+— the individual export is what lets a consumer drop or reorder it without
+forking.
 
 **2. Name it after the provider, not the markup.** `outlook-mobile`, not
 `div-id-signature`. The name is what shows up in someone's `applied` array when
@@ -286,10 +459,12 @@ entire reply wrapper on some mail; unguarded it deletes the whole message.
 
 ## README media
 
-The GIF and the two screenshots in the README are generated, not drawn:
+Every image in the README is generated, not drawn:
 
 ```sh
-pnpm media          # builds, then writes docs/media/*.gif and *.png
+pnpm media          # builds, then writes all of docs/media/*.gif and *.png
+pnpm media:render   # just the GIF, before/after and chat-view stills
+pnpm media:actions  # just docs/media/render-slots.png
 ```
 
 `scripts/media/render.mjs` renders the real `MailChatView` from `dist/` with the
@@ -299,7 +474,19 @@ are read out of `message.applied`, so the picture cannot claim a rule that did
 not fire. Change a bubble and the picture changes with it — which is the whole
 reason it is not a mockup.
 
-Regenerate it when the view's appearance changes, and commit the outputs: the
+`scripts/media/actions.mjs` does the same for the two render slots: it passes a
+star and a kebab to `renderActions` and a reply box to `renderFooter`, then an
+in-page script **measures** each rendered control with `getBoundingClientRect()`
+and draws the ring, the note and the connector from those coordinates. Nothing
+in that picture is positioned by hand, so if the slot ever moves the callout
+moves with it rather than quietly starting to lie.
+
+The Chrome plumbing both share lives in `scripts/media/chrome.mjs`, and the
+jsdom globals in `scripts/media/dom-globals.mjs` — which **must** be imported
+before anything from `dist/`, or the sanitizer resolves DOMPurify against a
+missing `window` and every body renders empty.
+
+Regenerate them when the view's appearance changes, and commit the outputs: the
 README points at `raw.githubusercontent.com` so the images render on npmjs.com
 too, and npm serves the README from the published tarball, not from GitHub.
 
@@ -369,11 +556,46 @@ Conventions the suite follows, and PRs are expected to follow:
 
 ## Code style
 
-There is no linter in the repo; match the surrounding code, which is consistent:
+Two tools decide it, so a review never has to:
 
-- **TypeScript, ESM, `.js` extensions on relative imports** (`./labels.js`) —
-  required for the emitted ESM to resolve.
-- `const`/`let`, `async`/`await`, no callbacks, template literals, `?.`/`??`.
+```sh
+pnpm lint          # ESLint — correctness rules. Fails CI.
+pnpm lint:fix      # …and fix what is fixable
+pnpm format        # Prettier — every formatting decision
+pnpm format:check  # …verify without writing. Fails CI.
+pnpm verify        # lint + format:check + type-check + test, in one go
+```
+
+Both run as their own CI job on every pull request. An `.editorconfig` sets
+your editor's indent, charset and newline to match before either tool runs, so
+a first save already lands close.
+
+**Prettier owns formatting completely** — width, quotes, semicolons, trailing
+commas, line breaks. Do not argue with it and do not hand-format around it:
+`eslint-config-prettier` switches off every ESLint rule that could disagree, so
+whatever it prints is correct by definition. Markdown is the one exception; it
+is hand-formatted and `.prettierignore`d, because Prettier pads table cells to
+the widest row and re-indents the annotated code blocks the docs teach with.
+
+**ESLint owns the things a reviewer would otherwise have to catch by eye.** The
+rules are individually commented in `eslint.config.js`; the ones most likely to
+stop your first PR:
+
+| Rule | Why it exists |
+| --- | --- |
+| `import-x/extensions` | A relative import without a `.js` extension type-checks, builds, and then throws `ERR_MODULE_NOT_FOUND` in somebody's app. Invisible in review. |
+| `regexp/no-super-linear-backtracking` | A mail body is the most hostile input a client sees; an unbounded quantifier beside another one is a 5 MB email that hangs the tab. |
+| `@typescript-eslint/consistent-type-imports` | `verbatimModuleSyntax` is on, so a type imported without `import type` survives into the emitted JS as a real import. |
+| `react-hooks/exhaustive-deps` | An error, not a warning. A stale closure in a mail client shows the previous thread's messages, which reads as data loss. |
+| `no-console` | A library that logs pollutes a console it does not own and cannot be silenced. Return the information instead. |
+
+`pnpm lint` runs with `--max-warnings` pinned to the ReDoS backlog that existed
+on the day the linter was adopted. Those warnings are grandfathered — each fix
+changes what a pattern matches and needs its own fixtures — but the count
+cannot grow, so **a new one fails your build even though the old ones do not.**
+
+What the tools cannot check, and review will:
+
 - **Pure functions, no mutated module state, side effects at the edges.**
   Anything that is not a React component should be callable twice with the same
   input and give the same answer.
@@ -414,7 +636,8 @@ its test together, docs on their own.
 For the PR itself:
 
 1. Branch off `main`.
-2. `pnpm type-check && pnpm test:coverage && pnpm build` all green.
+2. `pnpm verify && pnpm build` all green — that is lint, formatting, types and
+   the suite, which is exactly what CI runs.
 3. In the description, say **what mail this was tested against** — which client,
    which language, whether the sample was real. For a rule, paste the before and
    after of one body.
