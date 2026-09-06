@@ -62,13 +62,28 @@ export interface MailsToMessagesOptions extends CleanReplyBodyOptions {
   cache?: BodyCache;
   /** Render drafts as bubbles too. Off by default; an unsent draft is not a turn. */
   includeDrafts?: boolean;
+  /**
+   * Whether `mails` contains the thread's first message. Defaults to `true`.
+   *
+   * The oldest mail in the array is cleaned with its quoted history left in
+   * place: the thread's opener has nothing behind it to strip, so the quote
+   * passes could only damage real content. That is right for a whole thread and
+   * wrong for a PAGE of one — the oldest mail of page two does have history
+   * behind it, and treating it as the opener renders the entire conversation
+   * inside a single bubble.
+   *
+   * Pass `false` when handing over anything less than the thread from its
+   * start. Prefer passing the whole thread and paging with `bodyPending` and
+   * the view's `maxRendered`, which costs nothing per unfetched message.
+   */
+  containsThreadStart?: boolean;
 }
 
 /** Thread context {@link mailToMessage} cannot derive from a single mail. */
 export interface MailToMessageContext {
   /**
    * True only for the thread's genuine first message, whose quoted history is
-   * kept — it has nothing behind it to strip.
+   * kept. See {@link MailsToMessagesOptions.containsThreadStart}.
    */
   isOldest: boolean;
   /**
@@ -173,6 +188,7 @@ export function mailsToMessages(
     dateUnit = 'ms',
     cache,
     includeDrafts = false,
+    containsThreadStart = true,
     ...stripOptions
   } = options;
 
@@ -184,7 +200,9 @@ export function mailsToMessages(
     compareEpochMillis(toEpochMillis(left.date, dateUnit), toEpochMillis(right.date, dateUnit)),
   );
 
-  const oldestId = ordered[0]?.id;
+  // No id matches `undefined`, so a page that does not start the thread has no
+  // opener and every one of its messages is quote-stripped.
+  const oldestId = containsThreadStart ? ordered[0]?.id : undefined;
 
   return ordered.map((mail) =>
     toMessage(mail, {

@@ -358,6 +358,35 @@ describe('mailsToMessages', () => {
     expect(messages[1]?.body).not.toContain('quoted');
   });
 
+  // Regression: a caller paginating the thread hands over a PAGE, whose oldest
+  // mail is not the thread's opener — it has history behind it. Treating it as
+  // the opener keeps its quoted history, so one bubble renders the entire
+  // conversation. Nothing throws; it reads as "the stripping is broken".
+  it('strips quotes from every message when the page does not start the thread', () => {
+    const body = '<p>Text</p><blockquote>quoted</blockquote>';
+    const page = [mail({ id: 'a', date: MARCH_3, body }), mail({ id: 'b', date: MARCH_4, body })];
+
+    const whole = mailsToMessages(page, options);
+    const partial = mailsToMessages(page, { ...options, containsThreadStart: false });
+
+    expect(whole[0]?.body).toContain('quoted');
+    expect(partial[0]?.body).not.toContain('quoted');
+    expect(partial[1]?.body).not.toContain('quoted');
+  });
+
+  // Regression: the default has to stay "this IS the whole thread", because
+  // that is what the overwhelming majority of callers pass. Flipping it would
+  // silently start stripping real quotations out of every thread's opener.
+  it('treats the array as a whole thread unless told otherwise', () => {
+    const body = '<p>Text</p><blockquote>quoted</blockquote>';
+    const mails = [mail({ id: 'a', body })];
+
+    expect(mailsToMessages(mails, options)[0]?.body).toContain('quoted');
+    expect(mailsToMessages(mails, { ...options, containsThreadStart: true })[0]?.body).toContain(
+      'quoted',
+    );
+  });
+
   // Regression: an unsent draft is not a conversation turn. Rendering one as a
   // bubble makes it look sent, which is the kind of thing that loses a deal.
   it('excludes drafts by default and includes them on request', () => {
