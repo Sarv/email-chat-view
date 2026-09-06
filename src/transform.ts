@@ -29,7 +29,11 @@ export type { HtmlParser } from './dom.js';
 
 // --- The transform -----------------------------------------------------------
 export { createBodyCache, mailsToMessages, mailToMessage } from './transform/mails-to-messages.js';
-export type { BodyCache, MailsToMessagesOptions } from './transform/mails-to-messages.js';
+export type {
+  BodyCache,
+  MailsToMessagesOptions,
+  MailToMessageContext,
+} from './transform/mails-to-messages.js';
 
 // --- Individual strip passes -------------------------------------------------
 export {

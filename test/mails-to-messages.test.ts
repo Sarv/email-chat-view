@@ -99,7 +99,7 @@ describe('createBodyCache', () => {
 });
 
 describe('mailToMessage', () => {
-  const context = { isOldest: false, ownAddresses: new Set<string>(), dateUnit: 'ms' as const };
+  const context = { isOldest: false, dateUnit: 'ms' as const };
 
   it('carries identity, recipients and the cleaned body through', () => {
     const message = mailToMessage(
@@ -134,19 +134,41 @@ describe('mailToMessage', () => {
   // case-insensitive because SMTP local-parts are case-sensitive in the RFC but
   // never in practice, and stores normalize inconsistently.
   it('marks the reader’s own message regardless of address case', () => {
-    const own = new Set(['me@example.com']);
+    // Deliberately mixed case on BOTH sides: the caller hands over whatever
+    // their account record holds, and normalizing it is this function's job —
+    // it used to be the caller's, via a Set they had no public way to build.
+    const own = 'Me@Example.com';
     expect(
       mailToMessage(mail({ id: '1', fromAddress: 'ME@Example.com' }), {
         ...context,
-        ownAddresses: own,
+        currentUserAddress: own,
       }).isFromMe,
     ).toBe(true);
     expect(
       mailToMessage(mail({ id: '2', fromAddress: 'other@example.com' }), {
         ...context,
-        ownAddresses: own,
+        currentUserAddress: own,
       }).isFromMe,
     ).toBe(false);
+  });
+
+  // Regression: multi-account readers have several addresses here too, not
+  // only on the whole-thread call.
+  it('accepts several of the reader’s own addresses', () => {
+    const own = ['work@example.com', 'home@example.com'];
+    expect(
+      mailToMessage(mail({ id: '1', fromAddress: 'home@example.com' }), {
+        ...context,
+        currentUserAddress: own,
+      }).isFromMe,
+    ).toBe(true);
+  });
+
+  // Regression: `dateUnit` is optional here, as it is on the whole-thread call,
+  // and both must default the same way. A context defaulting to seconds would
+  // put every incrementally-transformed message 55 millennia into the future.
+  it('defaults to milliseconds when no unit is given', () => {
+    expect(mailToMessage(mail({ id: '1', date: MARCH_3 }), { isOldest: false }).date).toBe(MARCH_3);
   });
 
   // Regression: undefined, not false, when identity is unknowable. The view

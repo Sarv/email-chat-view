@@ -64,23 +64,53 @@ export interface MailsToMessagesOptions extends CleanReplyBodyOptions {
   includeDrafts?: boolean;
 }
 
+/** Thread context {@link mailToMessage} cannot derive from a single mail. */
+export interface MailToMessageContext {
+  /**
+   * True only for the thread's genuine first message, whose quoted history is
+   * kept — it has nothing behind it to strip.
+   */
+  isOldest: boolean;
+  /**
+   * The reader's own address, or addresses. Normalized here, so the caller does
+   * not have to know that matching is case-insensitive.
+   */
+  currentUserAddress?: string | readonly string[];
+  /** Unit of {@link Mail.date}. Defaults to `'ms'`. See {@link DateUnit}. */
+  dateUnit?: DateUnit;
+  /** Memo for cleaned bodies. See {@link createBodyCache}. */
+  cache?: BodyCache;
+  /** Rule overrides, passed through to {@link cleanReplyBody}. */
+  stripOptions?: CleanReplyBodyOptions;
+}
+
+/** {@link MailToMessageContext} with the reader's identity already resolved. */
+interface ResolvedContext extends Omit<MailToMessageContext, 'currentUserAddress' | 'dateUnit'> {
+  ownAddresses: Set<string>;
+  dateUnit: DateUnit;
+}
+
 /**
  * Convert one mail into one chat message.
  *
  * Exported for incremental use: when a single body arrives, re-transform that
  * message alone rather than the thread. `isOldest` is thread context the
- * message cannot know about itself.
+ * message cannot know about itself, so the caller supplies it — pass `true`
+ * only for the thread's real first message.
  */
-export function mailToMessage(
-  mail: Mail,
-  context: {
-    isOldest: boolean;
-    ownAddresses: Set<string>;
-    dateUnit: DateUnit;
-    cache?: BodyCache;
-    stripOptions?: CleanReplyBodyOptions;
-  },
-): ChatMessage {
+export function mailToMessage(mail: Mail, context: MailToMessageContext): ChatMessage {
+  const { currentUserAddress, dateUnit = 'ms', ...rest } = context;
+  return toMessage(mail, { ...rest, ownAddresses: ownAddressSet(currentUserAddress), dateUnit });
+}
+
+/**
+ * The shared body, taking the reader's addresses already normalized.
+ *
+ * {@link mailsToMessages} builds that set once for the thread rather than once
+ * per message, which is the only reason this is separate from the public
+ * function above.
+ */
+function toMessage(mail: Mail, context: ResolvedContext): ChatMessage {
   const { isOldest, ownAddresses, dateUnit, cache, stripOptions } = context;
 
   const base: ChatMessage = {
@@ -157,7 +187,7 @@ export function mailsToMessages(
   const oldestId = ordered[0]?.id;
 
   return ordered.map((mail) =>
-    mailToMessage(mail, {
+    toMessage(mail, {
       isOldest: mail.id === oldestId,
       ownAddresses,
       dateUnit,
