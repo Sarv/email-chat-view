@@ -345,6 +345,40 @@ code:
    `onVisibleRangeChange` so you fetch the bodies that are actually on screen
    first.
 
+### Pass the whole thread, always
+
+A fair worry at this point: *oldest-first — so I have to hand it every mail?*
+
+Yes, and you want to. The transform is pure per message and the cache is keyed
+on `(id, body)`, so calling it with all 200 mails after one body arrives cleans
+that one message and reuses the other 199. There is no work to save by slicing.
+
+Slicing breaks it unless you say so. The oldest mail in whatever array you pass
+is treated as the thread's opener and keeps its quoted history — correct for a
+real opener, which has nothing behind it to strip. Hand it page 2 without a word
+and that page's first message renders with the whole conversation inside it.
+Nothing throws.
+
+```ts
+// Page 2: there is no opener in here, so strip every message's quotes.
+mailsToMessages(pageTwoMails, { dateUnit: 's', containsThreadStart: false });
+```
+
+Paginate the parts that actually cost something:
+
+- **bodies you have not fetched yet** → include the mail with
+  `bodyPending: true`. It costs no transform work at all, so the thread opens
+  as headers and spinners and fills in.
+- **the DOM** → `maxRendered`, plus `hasOlder` / `onLoadOlder` to page upward.
+
+The same rule holds for `threadToMessages`, doubly: it de-duplicates quoted
+copies against the real messages across the whole array, so a thread split
+across calls gives you duplicate bubbles.
+
+Going one mail at a time — a retry, a single arriving body? `mailToMessage`
+transforms one mail and takes `isOldest` directly, so set it `true` only for the
+thread's genuine first message. Concatenate in date order afterwards.
+
 ---
 
 ## Troubleshooting
@@ -356,6 +390,8 @@ code:
 | Dates thousands of years in the future | the opposite — ms values with `dateUnit: 's'` | drop the option (`'ms'` is the default) |
 | `NoDomParserError` | no DOM and no `parser` | pass `linkedom` (see above) |
 | Signatures/quotes NOT stripped in Node | the `<html><body>` wrapper is missing | wrap the fragment |
+| One bubble contains the whole conversation | you passed a page, not the thread — its first mail was treated as the opener and kept its quotes | pass every mail you have, or `containsThreadStart: false` for a real page |
+| Duplicate bubbles from `threadToMessages` | de-duplication only sees the array you pass | pass the whole thread in one call |
 | `ReferenceError: document is not defined` | the **view** rendered during SSR | mark the component `'use client'`, or render it in an effect |
 | My own replies appear left-aligned | `currentUserAddress` missing or a different alias | pass every address the user sends from |
 | Cannot find module `email-chat-view/transform` (types) | old `moduleResolution` | set `"bundler"` / `"node16"` |

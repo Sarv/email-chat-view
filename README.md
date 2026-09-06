@@ -500,6 +500,57 @@ wants one more: splitting is the most expensive thing this package does — a
 parse, a boundary sweep and a clean per segment — so without a cache every
 newly arrived body re-splits every body already on screen.
 
+### Do I have to pass the whole thread?
+
+**Yes — pass everything you have, on every call.** That is the designed path,
+and the cache above is what makes it cheap: one arriving body re-cleans one
+message, not the thread. Chunking the *transform* to save work saves nothing.
+
+The transform is pure per message, with exactly **one** piece of thread-global
+context: the oldest message is cleaned with its quoted history left in place,
+because the thread's opener has nothing behind it to strip and the quote passes
+could only damage real content.
+
+That single fact is what makes a chunked call wrong:
+
+```ts
+// WRONG — page 2 does not contain the thread's first message
+const messages = mailsToMessages(pageTwoMails, { dateUnit: 's' });
+```
+
+The oldest mail *of that page* is treated as the thread opener, so **its whole
+quoted history is kept** and one bubble renders the entire conversation. Nothing
+throws. It reads as "the stripping is broken". Pass
+`containsThreadStart: false` when that is what you are doing.
+
+`threadToMessages` has a second reason: it de-duplicates quoted copies against
+the real messages across the whole array. Split it into pages and a quoted copy
+whose real message landed in the other page survives as a duplicate bubble.
+
+So paginate the two places that actually cost something, and keep handing the
+transform the full array:
+
+| To page | Do this | Not this |
+| --- | --- | --- |
+| **fetching bodies** | send the mail with `bodyPending: true` | leave the mail out |
+| **the DOM** | `maxRendered`, `hasOlder` / `onLoadOlder` | slice the array |
+
+A pending mail costs no transform work at all — the body is empty, so it
+returns before any parsing — which is why a 200-message thread can be handed
+over whole on the first render and still open instantly.
+
+If you genuinely must transform page by page, say so and the policy follows the
+page instead of the array:
+
+```ts
+// Page two of a thread: no opener here, so every message is quote-stripped.
+const messages = mailsToMessages(pageTwoMails, { dateUnit: 's', containsThreadStart: false });
+```
+
+For one mail at a time — a retry, an arriving body — `mailToMessage` takes
+`isOldest` directly, so pass `true` only for the thread's real first message.
+Either way, concatenate in date order afterwards.
+
 ### Paging older messages
 
 Threads are rendered newest-at-the-bottom, so paging goes *upward*. The view
@@ -755,9 +806,14 @@ view is root-only: importing it pulls in React.
 | `stripSignature` / `stripBanner` / `stripQuote` / `stripLines` / `stripSignOff` / `stripMarkers` / `stripDisclaimer` | one family each, for a corpus that wants six of the seven |
 
 `MailsToMessagesOptions`: `parser`, `currentUserAddress` (string or array),
-`dateUnit`, `cache`, `includeDrafts`, plus any `cleanReplyBody` option
-(`signatureRules`, `bannerRules`, `lineRules`, `quoteRules`, `markerRules`,
-`disclaimerRules`, `keepSignOff`, `keepQuotedHistory`).
+`dateUnit`, `cache`, `includeDrafts`, `containsThreadStart`, plus any
+`cleanReplyBody` option (`signatureRules`, `bannerRules`, `lineRules`,
+`quoteRules`, `markerRules`, `disclaimerRules`, `keepSignOff`,
+`keepQuotedHistory`).
+
+`MailToMessageContext`: `isOldest` (required), `currentUserAddress`, `dateUnit`,
+`cache`, `stripOptions`. The reader's addresses are normalized here, so pass
+them as you hold them — matching is case-insensitive.
 
 `ThreadToMessagesOptions`: those same five, plus `segment` and `solo`
 (`CleanFragmentOptions` for a quoted segment, and for a body with no quotes in
