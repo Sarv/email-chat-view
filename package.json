@@ -63,7 +63,9 @@
     "format:check": "prettier --check .",
     "verify": "pnpm run lint && pnpm run format:check && pnpm run type-check && pnpm run test:coverage",
     "clean": "rm -rf dist",
-    "media": "pnpm run build && node scripts/media/render.mjs",
+    "media": "pnpm run build && node scripts/media/render.mjs && node scripts/media/actions.mjs",
+    "media:render": "pnpm run build && node scripts/media/render.mjs",
+    "media:actions": "pnpm run build && node scripts/media/actions.mjs",
     "prepublishOnly": "pnpm run build"
   },
   "keywords": [

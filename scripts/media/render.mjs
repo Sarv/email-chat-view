@@ -18,33 +18,20 @@
  *
  * Requires: a built `dist/`, Google Chrome, and ffmpeg (GIF only).
  */
-import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { JSDOM } from 'jsdom';
-
+import { createShooter } from './chrome.mjs';
+// Side-effecting, and it MUST stay above any `dist/` import. See the file.
+import './dom-globals.mjs';
 import { mails, ME, NOW } from './thread.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
 const OUT_DIR = join(ROOT, 'docs', 'media');
-
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-
-/**
- * jsdom globals BEFORE the package is imported.
- *
- * The sanitizer resolves DOMPurify against `window` at module load; without one
- * every body sanitizes to empty and the bubbles render "no new content".
- */
-const dom = new JSDOM('<!doctype html><html><body></body></html>');
-globalThis.window = dom.window;
-globalThis.document = dom.window.document;
-globalThis.DOMParser = dom.window.DOMParser;
-globalThis.Node = dom.window.Node;
 
 const React = (await import('react')).default;
 const { renderToStaticMarkup } = await import('react-dom/server');
@@ -284,63 +271,7 @@ body {
 </script>
 `;
 
-/** One headless-Chrome screenshot. Its own profile dir, never the user's. */
-const profile = mkdtempSync(join(tmpdir(), 'ecv-media-'));
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const sizeOf = (path) => statSync(path, { throwIfNoEntry: false })?.size ?? 0;
-
-/**
- * Chrome's new headless mode writes the PNG and then, on macOS, frequently does
- * not exit — `execFileSync` waits for a process that never leaves. So: spawn it,
- * wait for the file to appear AND stop growing, then kill it. That is also
- * faster than a fixed timeout, because most frames land in a second or two.
- */
-const shoot = async (html, { width, height, out }) => {
-  rmSync(out, { force: true });
-  const file = join(profile, 'frame.html');
-  writeFileSync(file, html);
-
-  const child = spawn(
-    CHROME,
-    [
-      '--headless',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      /*
-       * Force the light scheme. Headless Chrome inherits the MACHINE's
-       * appearance setting, and the stylesheet has a real
-       * `prefers-color-scheme: dark` block — so on a dark-mode Mac the capture
-       * came out with dark-mode ink on the light demo panel and the message
-       * text was unreadable. The library is fine either way (the identity wash
-       * is translucent and sits on whatever surface is under it); it is the
-       * PICTURE that must not depend on who regenerated it. `color-scheme:
-       * light` on :root does not flip the media query in this build; this does.
-       */
-      '--blink-settings=preferredColorScheme=1',
-      `--user-data-dir=${profile}`,
-      // 2x, then downscaled by ffmpeg / kept as a retina still: text stays crisp.
-      '--force-device-scale-factor=2',
-      `--window-size=${width},${height}`,
-      '--virtual-time-budget=1500',
-      `--screenshot=${out}`,
-      `file://${file}`,
-    ],
-    { stdio: 'ignore' },
-  );
-
-  try {
-    for (let waited = 0; waited < 30_000; waited += 200) {
-      await sleep(200);
-      const size = sizeOf(out);
-      if (size === 0) continue;
-      await sleep(300);
-      if (sizeOf(out) === size) return;
-    }
-    throw new Error(`screenshot never settled: ${out}`);
-  } finally {
-    child.kill('SIGKILL');
-  }
-};
+const { shoot, cleanup } = createShooter();
 
 const GIF_SIZE = { width: 960, height: 620 };
 
@@ -349,8 +280,16 @@ const GIF_SIZE = { width: 960, height: 620 };
  * clutter collapses, the chat view is what is left.
  */
 const storyboard = [
-  { hold: 1.9, caption: 'The thread as your mail store hands it over', vars: { strip: 1, hl: 0, raw: 1, chat: 0 } },
-  { hold: 1.7, caption: 'Each block is matched by a named rule', vars: { strip: 1, hl: 1, raw: 1, chat: 0 } },
+  {
+    hold: 1.9,
+    caption: 'The thread as your mail store hands it over',
+    vars: { strip: 1, hl: 0, raw: 1, chat: 0 },
+  },
+  {
+    hold: 1.7,
+    caption: 'Each block is matched by a named rule',
+    vars: { strip: 1, hl: 1, raw: 1, chat: 0 },
+  },
   ...[0.82, 0.6, 0.4, 0.22, 0.08, 0].map((strip) => ({
     hold: 0.1,
     caption: 'Each block is matched by a named rule',
@@ -372,7 +311,11 @@ const storyboard = [
     caption: 'What is left is one turn per message',
     vars: { strip: 0, hl: 0, ...vars },
   })),
-  { hold: 2.8, caption: 'What is left is one turn per message', vars: { strip: 0, hl: 0, raw: 0, chat: 1 } },
+  {
+    hold: 2.8,
+    caption: 'What is left is one turn per message',
+    vars: { strip: 0, hl: 0, raw: 0, chat: 1 },
+  },
 ];
 
 mkdirSync(OUT_DIR, { recursive: true });
@@ -400,10 +343,18 @@ console.log('assembling gif…');
 execFileSync(
   'ffmpeg',
   [
-    '-y', '-f', 'concat', '-safe', '0', '-i', join(frameDir, 'frames.txt'),
+    '-y',
+    '-f',
+    'concat',
+    '-safe',
+    '0',
+    '-i',
+    join(frameDir, 'frames.txt'),
     '-filter_complex',
     `scale=${GIF_SIZE.width}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3`,
-    '-loop', '0', gif,
+    '-loop',
+    '0',
+    gif,
   ],
   { stdio: 'ignore' },
 );
@@ -425,5 +376,5 @@ await shoot(
 );
 
 rmSync(frameDir, { recursive: true, force: true });
-rmSync(profile, { recursive: true, force: true });
+cleanup();
 console.log(`done -> ${OUT_DIR}`);
