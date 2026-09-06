@@ -11,7 +11,7 @@
  * that a reader in Tokyo wants 24-hour time and one in Chicago does not, which
  * a format string like `'h:mm a'` hard-codes wrongly for most of the world.
  */
-import type { ViewLabels } from './labels.js';
+import type { DayLabels, ViewLabels } from './labels.js';
 
 /** An unreadable timestamp renders as nothing rather than as 1970. */
 function toDate(dateMs: number): Date | null {
@@ -76,6 +76,36 @@ export function formatFullTimestamp(dateMs: number, locale?: string | string[]):
   return date.toLocaleString(locale, { dateStyle: 'full', timeStyle: 'short' });
 }
 
+/** What a bubble header shows for a timestamp, and what its tooltip says. */
+export interface BubbleTimestamp {
+  /** Visible text. Empty when the date cannot be read — the element is then dropped. */
+  text: string;
+  /** Hover text: the full instant, and whether it is a guess. */
+  title: string;
+}
+
+/**
+ * The timestamp of one bubble, marked when the date was inferred.
+ *
+ * A message recovered from a quote is dated from the mail that quoted it (see
+ * {@link ChatMessage.dateApprox}), and showing that as an exact time invents a
+ * precision nobody has. The tilde is the same shorthand a clock face or a
+ * measurement uses, and the tooltip says it in words for anyone who does not
+ * read it that way.
+ */
+export function bubbleTimestamp(
+  dateMs: number,
+  approximate: boolean | undefined,
+  labels: ViewLabels,
+  locale?: string | string[],
+  now: number = Date.now(),
+): BubbleTimestamp {
+  const text = formatChatTimestamp(dateMs, labels, locale, now);
+  const full = formatFullTimestamp(dateMs, locale);
+  if (!approximate) return { text, title: full };
+  return { text: text && `~${text}`, title: `${labels.approximateTime}: ${full}` };
+}
+
 /**
  * Heading for a date separator: `Today`, `Yesterday`, `3 March 2025`, or the
  * explicit unknown-date label.
@@ -86,7 +116,7 @@ export function formatFullTimestamp(dateMs: number, locale?: string | string[]):
  */
 export function dateGroupLabel(
   dateMs: number,
-  labels: ViewLabels,
+  labels: DayLabels,
   locale?: string | string[],
   now: number = Date.now(),
 ): string {

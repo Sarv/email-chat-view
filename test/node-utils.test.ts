@@ -43,7 +43,11 @@ describe('isIgnorableNode', () => {
   // Regression: an empty <div> wrapping a logo or a layout table is meaningful
   // even with zero text. Treating it as ignorable deletes the image.
   it('keeps a textless element that contains an image, table or iframe', () => {
-    for (const markup of ['<img src="x">', '<table><tr><td></td></tr></table>', '<iframe></iframe>']) {
+    for (const markup of [
+      '<img src="x">',
+      '<table><tr><td></td></tr></table>',
+      '<iframe></iframe>',
+    ]) {
       const body = parseBody(`<p>real</p><div>${markup}</div>`);
       expect(meaningfulChildren(body)).toHaveLength(2);
     }

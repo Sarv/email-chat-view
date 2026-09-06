@@ -32,7 +32,16 @@ export function extensionOf(filename: string | null | undefined): string {
 
 /** Extensions the host is expected to be able to show inline. */
 export const PREVIEWABLE_EXTENSIONS = new Set([
-  'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'txt', 'csv',
+  'pdf',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'svg',
+  'avif',
+  'txt',
+  'csv',
 ]);
 
 /** MIME prefixes that are previewable whatever the filename says. */

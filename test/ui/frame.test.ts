@@ -221,17 +221,32 @@ describe('measureFrameHeight', () => {
   it('takes the largest of the range and the scroll heights', () => {
     expect(
       measureFrameHeight(
-        fakeDoc({ rangeBottom: 120, bodyTop: 20, bodyScrollHeight: 60, documentElement: { scrollHeight: 80 } }),
+        fakeDoc({
+          rangeBottom: 120,
+          bodyTop: 20,
+          bodyScrollHeight: 60,
+          documentElement: { scrollHeight: 80 },
+        }),
       ),
     ).toBe(100);
     expect(
       measureFrameHeight(
-        fakeDoc({ rangeBottom: 60, bodyTop: 20, bodyScrollHeight: 300, documentElement: { scrollHeight: 80 } }),
+        fakeDoc({
+          rangeBottom: 60,
+          bodyTop: 20,
+          bodyScrollHeight: 300,
+          documentElement: { scrollHeight: 80 },
+        }),
       ),
     ).toBe(300);
     expect(
       measureFrameHeight(
-        fakeDoc({ rangeBottom: 60, bodyTop: 20, bodyScrollHeight: 30, documentElement: { scrollHeight: 400 } }),
+        fakeDoc({
+          rangeBottom: 60,
+          bodyTop: 20,
+          bodyScrollHeight: 30,
+          documentElement: { scrollHeight: 400 },
+        }),
       ),
     ).toBe(400);
   });
@@ -244,7 +259,9 @@ describe('measureFrameHeight', () => {
 
   it('ignores a missing or non-finite scroll height', () => {
     expect(
-      measureFrameHeight(fakeDoc({ rangeBottom: 50, bodyScrollHeight: Number.NaN, documentElement: null })),
+      measureFrameHeight(
+        fakeDoc({ rangeBottom: 50, bodyScrollHeight: Number.NaN, documentElement: null }),
+      ),
     ).toBe(50);
   });
 });

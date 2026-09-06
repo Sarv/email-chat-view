@@ -16,7 +16,7 @@ import { useCallback, useMemo, type ReactNode } from 'react';
 import type { HtmlParser } from '../dom.js';
 import type { Attachment, ChatMessage } from '../types.js';
 import { inspectBody } from '../ui/body-shape.js';
-import { formatChatTimestamp, formatFullTimestamp } from '../ui/dates.js';
+import { bubbleTimestamp } from '../ui/dates.js';
 import { resolveLabels, type ViewLabels } from '../ui/labels.js';
 import {
   describeRecipients,
@@ -25,6 +25,7 @@ import {
   type ParsedAddress,
 } from '../ui/recipients.js';
 import type { SenderColor } from '../ui/sender-colors.js';
+
 import { AttachmentChip } from './AttachmentChip.js';
 import { Avatar } from './Avatar.js';
 import { MessageBody } from './MessageBody.js';
@@ -33,7 +34,13 @@ import { Tooltip } from './Tooltip.js';
 /** How wide the recipients tooltip may get before it wraps. */
 const RECIPIENTS_TOOLTIP_WIDTH = 420;
 
-function AddressRow({ label, recipients }: { label: string; recipients: readonly ParsedAddress[] }) {
+function AddressRow({
+  label,
+  recipients,
+}: {
+  label: string;
+  recipients: readonly ParsedAddress[];
+}) {
   if (!recipients.length) return null;
   return (
     <span className="sec-addr-row">
@@ -74,8 +81,14 @@ export function RecipientsSummary({
   return (
     <span className="sec-addr">
       <AddressRow label={labels.from} recipients={from} />
-      <AddressRow label={labels.to} recipients={parseAddressList(message.toAddress, message.toNames)} />
-      <AddressRow label={labels.cc} recipients={parseAddressList(message.ccAddress, message.ccNames)} />
+      <AddressRow
+        label={labels.to}
+        recipients={parseAddressList(message.toAddress, message.toNames)}
+      />
+      <AddressRow
+        label={labels.cc}
+        recipients={parseAddressList(message.ccAddress, message.ccNames)}
+      />
     </span>
   );
 }
@@ -149,7 +162,7 @@ export function ChatBubble({
 
   const senderLabel = displayNameFor(message.fromAddress, message.fromName);
   const recipientSummary = describeRecipients(recipients, resolvedLabels);
-  const timestamp = formatChatTimestamp(message.date, resolvedLabels, locale, now);
+  const timestamp = bubbleTimestamp(message.date, message.dateApprox, resolvedLabels, locale, now);
 
   const previewAttachment = useCallback(
     (attachment: Attachment) => onPreviewAttachment?.(attachment, message),
@@ -210,7 +223,7 @@ export function ChatBubble({
                 </span>
               ) : null}
             </Tooltip>
-            {timestamp ? (
+            {timestamp.text ? (
               <time
                 className="sec-head__time"
                 // Safe unguarded: a date this machine cannot read produces an
@@ -218,9 +231,9 @@ export function ChatBubble({
                 // rendered at all. Machine-readable form is always UTC; the
                 // visible text next to it is the reader's own zone.
                 dateTime={new Date(message.date).toISOString()}
-                title={formatFullTimestamp(message.date, locale)}
+                title={timestamp.title}
               >
-                {timestamp}
+                {timestamp.text}
               </time>
             ) : null}
           </div>

@@ -20,6 +20,7 @@ import type { Attachment, ChatMessage } from '../types.js';
 import { DEFAULT_SENDER_RUN_MS, groupMessagesByDate, isSameSenderRun } from '../ui/grouping.js';
 import { fillTemplate, resolveLabels, type ViewLabels } from '../ui/labels.js';
 import { buildSenderColorMap, resolveSenderColor } from '../ui/sender-colors.js';
+
 import { ChatBubble } from './ChatBubble.js';
 import { ChatSkeleton } from './ChatSkeleton.js';
 import { DateSeparator } from './DateSeparator.js';
@@ -44,10 +45,18 @@ const DEFAULT_MAX_RENDERED = 50;
  * an effect that listed one in its dependencies would tear down and rebuild its
  * observers on every render, which for an IntersectionObserver means it never
  * settles long enough to report anything.
+ *
+ * The write is in an effect, not in the render body. A render can be thrown
+ * away before it commits, and a ref written by a discarded render would then
+ * hold a value the reader never saw. Every consumer here reads `.current` from
+ * an observer callback — asynchronous, long after commit — and this hook is
+ * called above the effects that use it, so the ref is always current by then.
  */
 function useLatest<T>(value: T) {
   const ref = useRef(value);
-  ref.current = value;
+  useEffect(() => {
+    ref.current = value;
+  }, [value]);
   return ref;
 }
 
@@ -120,7 +129,11 @@ export function MailChatView({
   emptyState,
   className,
 }: MailChatViewProps) {
-  const resolvedLabels = resolveLabels(labels);
+  // Memoised on the prop, so a host that passes a stable `labels` object (or
+  // none) gets one resolved object for the life of the view. Everything keyed
+  // off the labels — the date grouping, every bubble — then keeps its identity
+  // too. A host that writes `labels={{ ... }}` inline opts out of all of it.
+  const resolvedLabels = useMemo(() => resolveLabels(labels), [labels]);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -149,9 +162,7 @@ export function MailChatView({
 
   const groups = useMemo(
     () => groupMessagesByDate(rendered, resolvedLabels, locale, now),
-    // `resolvedLabels` is a fresh object whenever `labels` is passed, so the
-    // day labels are keyed off the fields that actually appear in them.
-    [rendered, resolvedLabels.today, resolvedLabels.yesterday, resolvedLabels.unknownDate, locale, now],
+    [rendered, resolvedLabels, locale, now],
   );
 
   const lastMessageId = messages[messages.length - 1]?.id;

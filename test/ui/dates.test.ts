@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  bubbleTimestamp,
   dateGroupLabel,
   formatChatTime,
   formatChatTimestamp,
@@ -137,5 +138,48 @@ describe('dateGroupLabel', () => {
 
   it('defaults “now” to the real clock', () => {
     expect(dateGroupLabel(Date.now(), DEFAULT_LABELS, 'en-GB')).toBe(DEFAULT_LABELS.today);
+  });
+});
+
+describe('bubbleTimestamp', () => {
+  it('shows the short form, with the full instant on hover', () => {
+    const stamp = bubbleTimestamp(TODAY, false, DEFAULT_LABELS, 'en-GB', NOW);
+
+    expect(stamp.text).toBe(formatChatTimestamp(TODAY, DEFAULT_LABELS, 'en-GB', NOW));
+    expect(stamp.title).toBe(formatFullTimestamp(TODAY, 'en-GB'));
+  });
+
+  // Regression: a date the transform GUESSED must not render as an exact time.
+  // A reader comparing a bubble against their calendar has no other way to tell
+  // which of the two is the guess.
+  it('marks an inferred time, in the text and in the tooltip', () => {
+    const stamp = bubbleTimestamp(YESTERDAY, true, DEFAULT_LABELS, 'en-GB', NOW);
+
+    expect(stamp.text).toBe(`~${formatChatTimestamp(YESTERDAY, DEFAULT_LABELS, 'en-GB', NOW)}`);
+    expect(stamp.title).toBe(
+      `${DEFAULT_LABELS.approximateTime}: ${formatFullTimestamp(YESTERDAY, 'en-GB')}`,
+    );
+  });
+
+  // Regression: the tilde must not become the whole timestamp. An unreadable
+  // date renders no element at all, and a bare "~" in the header is a bug the
+  // reader cannot interpret.
+  it('stays empty for an unreadable date, approximate or not', () => {
+    for (const value of UNREADABLE) {
+      expect(bubbleTimestamp(value, false, DEFAULT_LABELS, 'en-GB', NOW).text).toBe('');
+      expect(bubbleTimestamp(value, true, DEFAULT_LABELS, 'en-GB', NOW).text).toBe('');
+    }
+  });
+
+  it('treats an absent flag as “not approximate”', () => {
+    expect(bubbleTimestamp(TODAY, undefined, DEFAULT_LABELS, 'en-GB', NOW)).toEqual(
+      bubbleTimestamp(TODAY, false, DEFAULT_LABELS, 'en-GB', NOW),
+    );
+  });
+
+  it('defaults “now” to the real clock', () => {
+    expect(bubbleTimestamp(Date.now(), false, DEFAULT_LABELS, 'en-GB').text).toBe(
+      formatChatTime(Date.now(), 'en-GB'),
+    );
   });
 });

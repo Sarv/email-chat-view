@@ -6,10 +6,12 @@
  * new provider should be a five-line object plus a fixture, reviewable by
  * someone who has never read the engine.
  *
- * Three rule kinds cover everything real mail throws at us:
+ * Four rule kinds cover everything real mail throws at us:
  *
  *   DomRule        an element identifiable by a CSS selector
  *                  (`.gmail_signature`, `div.moz-signature`, `blockquote`)
+ *   LineRule       a convention with no container of its own, existing only as
+ *                  a standalone visual line ("--", "Sent from my iPhone")
  *   MarkerRule     a text boundary after which everything is quoted history
  *                  ("On ... wrote:", "-----Original Message-----")
  *   DisclaimerRule a trailing legal/confidentiality footer, matched by opening
@@ -17,9 +19,13 @@
  *
  * Prefer a DomRule whenever the provider gives you a class or id to grab: it is
  * exact, order-independent, and cannot mis-fire on body text that merely quotes
- * a phrase. Reach for a MarkerRule only for conventions that exist purely as
- * prose, which is genuinely the case for reply attributions.
+ * a phrase. Reach for a LineRule when the convention is a line the client never
+ * wrapped in anything, so there is no selector to name it by. Reach for a
+ * MarkerRule only for conventions that exist purely as prose, which is
+ * genuinely the case for reply attributions.
  */
+
+import type { HtmlParser } from '../dom.js';
 
 /**
  * An element removable by CSS selector.
@@ -243,5 +249,5 @@ export interface StripOptions {
    * HTML parser to use. Defaults to the platform `DOMParser`; required in Node.
    * See `src/dom.ts`.
    */
-  parser?: import('../dom.js').HtmlParser;
+  parser?: HtmlParser;
 }

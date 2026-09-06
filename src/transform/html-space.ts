@@ -12,6 +12,7 @@
  */
 import {
   EMBEDDED_MEDIA_SELECTOR,
+  foldNbsp,
   normalizedText,
   safeMatches,
   safeQueryAll,
@@ -71,7 +72,9 @@ const LONG_BREAK_RUN = /(?:<br\s*\/?>\s*){3,}/gi;
  */
 export function trimEmptyEdges(html: string): string {
   const withoutLead = html.replace(LEADING_DEAD_SPACE, '');
-  const trimmed = trimTrailingWindowed(withoutLead, (tail) => tail.replace(TRAILING_DEAD_SPACE, ''));
+  const trimmed = trimTrailingWindowed(withoutLead, (tail) =>
+    tail.replace(TRAILING_DEAD_SPACE, ''),
+  );
   return trimmed.replace(LONG_BREAK_RUN, '<br><br>').trim();
 }
 
@@ -97,6 +100,33 @@ export function isEmptyElement(element: Element): boolean {
   if (safeMatches(element, VISIBLE_WITHOUT_TEXT)) return false;
   if (safeQueryAll(element, VISIBLE_WITHOUT_TEXT).length) return false;
   return !normalizedText(element);
+}
+
+/**
+ * The same question as {@link isEmptyElement}, asked of a STRING.
+ *
+ * Derived from the same selector list rather than restating the tags, because a
+ * caller that drops a "blank" segment and a caller that drops a "blank" element
+ * disagreeing about whether a picture counts is how an image-only message
+ * vanishes from a thread.
+ */
+const VISIBLE_WITHOUT_TEXT_TAG = new RegExp(
+  `<(?:${VISIBLE_WITHOUT_TEXT.split(',').join('|')})\\b`,
+  'i',
+);
+
+/**
+ * Whether a serialized fragment would render as ANYTHING.
+ *
+ * Used to decide that a cleaned segment is empty and can be dropped. Text is
+ * the common answer, but not the only one: a message whose whole content is a
+ * screenshot has no text at all, and judging it by text alone deletes it from
+ * the thread — which is exactly what the code this came from did.
+ */
+export function hasVisibleContent(html: string): boolean {
+  if (!html) return false;
+  if (VISIBLE_WITHOUT_TEXT_TAG.test(html)) return true;
+  return foldNbsp(html.replace(/<[^>]*>/g, ' ')).trim().length > 0;
 }
 
 const NODE_TYPE_ELEMENT = 1;
@@ -247,6 +277,6 @@ export function looksDesigned(html: string | null | undefined): boolean {
   // styled with a background, or several elements each carrying a style
   // attribute (callout boxes, dividers, chips). This is what separates such a
   // template from a plain hand-written reply.
-  if (/<a\b[^>]*\sstyle=["'][^"']*(background|padding|border-radius)/i.test(html)) return true;
+  if (/<a\b[^>]*\sstyle=["'][^"']*(?:background|padding|border-radius)/i.test(html)) return true;
   return (html.match(/\bstyle\s*=/gi)?.length ?? 0) >= 4;
 }

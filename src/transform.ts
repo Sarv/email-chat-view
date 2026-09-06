@@ -28,11 +28,7 @@ export { hasGlobalDomParser, NoDomParserError, resolveParser } from './dom.js';
 export type { HtmlParser } from './dom.js';
 
 // --- The transform -----------------------------------------------------------
-export {
-  createBodyCache,
-  mailsToMessages,
-  mailToMessage,
-} from './transform/mails-to-messages.js';
+export { createBodyCache, mailsToMessages, mailToMessage } from './transform/mails-to-messages.js';
 export type { BodyCache, MailsToMessagesOptions } from './transform/mails-to-messages.js';
 
 // --- Individual strip passes -------------------------------------------------
@@ -47,6 +43,80 @@ export {
   stripSignOff,
 } from './transform/strip.js';
 export type { CleanReplyBodyOptions, StripFamilyOptions } from './transform/strip.js';
+
+// --- Fragment cleaning (for thread splitters) --------------------------------
+// The other half of the strip layer: `cleanReplyBody` throws quoted history
+// away, `cleanFragment` cleans a segment that has already been carved out of it
+// — so it UNWRAPS quote containers instead of removing them.
+export {
+  ATTRIBUTION_LINE_SELECTORS,
+  cleanFragment,
+  drawsLeftBorder,
+  INDENT_BAR_SELECTOR,
+  QUOTE_WRAPPER_SELECTORS,
+  removeAttributionLines,
+  removeEmptyBlocks,
+  unwrapElement,
+  unwrapIndentBars,
+  unwrapQuoteWrappers,
+} from './transform/fragment.js';
+export type { CleanFragmentOptions } from './transform/fragment.js';
+
+// --- Whitespace and body shape -----------------------------------------------
+export {
+  collapseExcessBlankSpace,
+  hasVisibleContent,
+  isEmptyElement,
+  looksDesigned,
+  trimEdgeEmpties,
+  trimEmptyEdges,
+  trimTrailingWindowed,
+} from './transform/html-space.js';
+
+// --- Splitting one body into the messages quoted inside it -------------------
+// A reply carries the conversation with it, so a single mail is frequently a
+// whole thread. `splitMailBody` is the entry point; the pieces under it are
+// exported because a client whose attribution shape none of the three detectors
+// recognise is a real possibility, and composing a new detector out of these
+// beats forking the file.
+export { contentKey, createSegmentCache, threadToMessages } from './thread/thread-to-messages.js';
+export type { SegmentCache, ThreadToMessagesOptions } from './thread/thread-to-messages.js';
+export { minimalFragmentOptions, splitMailBody } from './thread/split-body.js';
+export type { BodySegment, SplitMailBodyOptions } from './thread/split-body.js';
+export {
+  ATTRIBUTION_MARKER_SELECTOR,
+  collectAttributionLine,
+  collectInlineLine,
+  findBoundaries,
+  firstNonBlankChild,
+  HEADER_LABEL_PATTERN,
+  HEADER_PATTERN,
+  lineStartNodes,
+} from './thread/boundaries.js';
+export type { Boundary, InlineLine } from './thread/boundaries.js';
+export {
+  cleanAttributionName,
+  deriveNameFromEmail,
+  extractEmailFrom,
+  parseAttribution,
+} from './thread/attribution.js';
+export type { ParsedAttribution } from './thread/attribution.js';
+export { parseHumanDate } from './thread/human-date.js';
+
+// --- Slicing a tree between two nodes ----------------------------------------
+// What a DOM `Range` would do, done with `childNodes` and `removeChild` because
+// `Range` is the least implemented corner of every server-side DOM. A splitter
+// built on the boundary detectors needs these to cut with.
+export {
+  comparePaths,
+  isPathPrefix,
+  nodeAtPath,
+  pathTo,
+  removeFromNodeOnward,
+  removeUpToNodeInclusive,
+  sliceBetween,
+} from './transform/dom-slice.js';
+export type { SliceBounds } from './transform/dom-slice.js';
 
 // --- Rule engines ------------------------------------------------------------
 // Exported so a consumer with an already-parsed document can run a pass over it
@@ -117,6 +187,7 @@ export {
   gibberishBlobLine,
   lineRules,
   meetingBoilerplateLine,
+  minimalLineRules,
   mobileFooterLine,
   signatureDelimiterLine,
 } from './rules/line.js';
@@ -139,11 +210,7 @@ export {
   outlookUnderscoreSeparator,
   wroteAttribution,
 } from './rules/marker.js';
-export {
-  disclaimerRules,
-  englishDisclaimer,
-  hrDelimitedDisclaimer,
-} from './rules/disclaimer.js';
+export { disclaimerRules, englishDisclaimer, hrDelimitedDisclaimer } from './rules/disclaimer.js';
 
 // --- Classification ----------------------------------------------------------
 export { classifyMail, isConversational } from './classify/classify-mail.js';

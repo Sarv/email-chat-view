@@ -134,10 +134,9 @@ describe('applyDomRules', () => {
   it('honours maxTextLength, leaving an oversized match in place', () => {
     const long = 'x'.repeat(600);
     const body = parseBody(`<div id="signature">${long}</div>`);
-    const applied = applyDomRules(
-      body,
-      [rule({ name: 'guarded', selectors: ['#signature'], maxTextLength: 500 })],
-    );
+    const applied = applyDomRules(body, [
+      rule({ name: 'guarded', selectors: ['#signature'], maxTextLength: 500 }),
+    ]);
 
     expect(applied).toEqual([]);
     expect(body.innerHTML).toContain(long);
@@ -208,10 +207,9 @@ describe('applyDomRules', () => {
     const body = parseBody(
       '<p>My reply.</p><div id="appendonsend"></div><hr><div>quoted thread</div><p>more</p>',
     );
-    const applied = applyDomRules(
-      body,
-      [rule({ name: 'boundary', selectors: ['#appendonsend'], boundary: true })],
-    );
+    const applied = applyDomRules(body, [
+      rule({ name: 'boundary', selectors: ['#appendonsend'], boundary: true }),
+    ]);
 
     expect(applied).toEqual(['boundary']);
     expect(body.innerHTML).toBe('<p>My reply.</p>');

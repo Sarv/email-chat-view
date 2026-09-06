@@ -24,8 +24,7 @@ import type { HtmlParser } from '../../src/dom.js';
  * return its input unchanged, and the whole suite would pass while stripping
  * nothing. This is the same wrapper the README tells consumers to use.
  */
-export const parser: HtmlParser = (html) =>
-  parseHTML(`<html><body>${html}</body></html>`).document;
+export const parser: HtmlParser = (html) => parseHTML(`<html><body>${html}</body></html>`).document;
 
 /** Parse and hand back the `<body>` element, which is what the engines take. */
 export function parseBody(html: string): Element {
@@ -40,8 +39,7 @@ export const throwingParser: HtmlParser = () => {
 };
 
 /** A parser that yields a document with no `body`, which a real one can do. */
-export const bodylessParser: HtmlParser = () =>
-  ({ body: null }) as unknown as Document;
+export const bodylessParser: HtmlParser = () => ({ body: null }) as unknown as Document;
 
 /**
  * A parser that works for the first `calls` invocations and then fails.
@@ -52,7 +50,10 @@ export const bodylessParser: HtmlParser = () =>
  * and failed the next time" is a real state, not a contrived one, and the
  * fallback has to hand back the marker-stripped HTML rather than lose the mail.
  */
-export function parserFailingAfter(calls: number, mode: 'throw' | 'bodyless' = 'throw'): HtmlParser {
+export function parserFailingAfter(
+  calls: number,
+  mode: 'throw' | 'bodyless' = 'throw',
+): HtmlParser {
   let seen = 0;
   return (html) => {
     seen += 1;

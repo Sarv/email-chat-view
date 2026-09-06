@@ -1,6 +1,6 @@
 {
   "name": "email-chat-view",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Turn an email thread into a chat-style conversation view. Provider-rule-driven quote/signature/disclaimer stripping plus a React chat UI.",
   "license": "MIT",
   "repository": {

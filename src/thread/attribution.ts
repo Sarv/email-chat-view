@@ -57,11 +57,11 @@ const LEADING_TIME_TAIL =
  * Sharma wrote:" is a person, not a meridiem, and appending it would turn a
  * date chrono parses into one it does not.
  */
-function parseAttributionDate(date: string, nameBlob: string): number | null {
+function parseAttributionDate(date: string, nameBlob: string, refDate?: Date): number | null {
   const trimmedDate = date.trim();
-  if (!/\d$/.test(trimmedDate)) return parseHumanDate(trimmedDate);
+  if (!/\d$/.test(trimmedDate)) return parseHumanDate(trimmedDate, refDate);
   const tail = nameBlob.match(LEADING_TIME_TAIL)?.[0].replace(/[\s,]+$/, '');
-  return parseHumanDate(tail ? `${trimmedDate} ${tail}` : trimmedDate);
+  return parseHumanDate(tail ? `${trimmedDate} ${tail}` : trimmedDate, refDate);
 }
 
 /**
@@ -75,7 +75,7 @@ function parseAttributionDate(date: string, nameBlob: string): number | null {
  * for the attribution line.
  */
 export function extractEmailFrom(raw: string | undefined | null): string | null {
-  const match = (raw || '').match(/[^\s<>,;:"']+@[^\s<>,;:"']+\.[^\s<>,;:"']+/);
+  const match = (raw || '').match(/[^\s"',:;<>][^\s"',:;<>@]*@[^\s"',:;<>]+\.[^\s<>,;:"']+/);
   return match ? match[0].replace(/[.,;:>'"]+$/, '') : null;
 }
 
@@ -92,9 +92,7 @@ export function deriveNameFromEmail(email: string | null): string | null {
   const local = email.split('@')[0]!.replace(/\d+/g, '');
   const words = local.split(/[._+-]+/).filter(Boolean);
   if (!words.length) return null;
-  return words
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
 /**
@@ -121,8 +119,8 @@ export function cleanAttributionName(
     .replace(/<[^>]*>/g, ' ') // drop "<email>" chunks
     .replace(/\S+@\S+/g, ' ') // drop bare addresses; see the note above on order
     .replace(LEADING_TIME_TAIL, '') // "PM Ankur" -> "Ankur"; see parseAttributionDate
-    .replace(/\s+via\s+.*$/i, '') // "Alice via Google Groups"
-    .replace(/[\s,]*\b[\w-]+(?:\.[\w-]+)+>?\s*$/i, ' ') // trailing domain remnant "tcs.com>"
+    .replace(/\s+via\s+(?:\S.*)?$/i, '') // "Alice via Google Groups"
+    .replace(/[\s,]*\b[\w-]+(?:\.[\w-]+)+>?\s*$/, ' ') // trailing domain remnant "tcs.com>"
     .replace(/["'<>]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -134,8 +132,16 @@ export function cleanAttributionName(
  *
  * Null is the common case and not a failure: this is called on every candidate
  * line in a body, and most of them are ordinary prose.
+ *
+ * `refDate` anchors the relative expressions attribution lines are full of —
+ * "On Monday", "Yesterday at 4pm", "2 days ago". Pass the SENDING TIME of the
+ * mail the line was found in: a quote is always written before the mail that
+ * quotes it, so anchoring on the carrier resolves "Monday" to the Monday before
+ * that mail. Leaving it to default to now resolves it against the reader's
+ * clock instead, which on an old thread dates a quote AFTER the reply carrying
+ * it and sorts the conversation backwards.
  */
-export function parseAttribution(text: string): ParsedAttribution | null {
+export function parseAttribution(text: string, refDate?: Date): ParsedAttribution | null {
   const line = (text || '').replace(/\s+/g, ' ').trim();
   if (!line) return null;
 
@@ -145,33 +151,49 @@ export function parseAttribution(text: string): ParsedAttribution | null {
   // the NAME rather than the comma: the name is the run right before <email>
   // that has no digits or colons (dates and times always have one, names never
   // do), which lets the date greedily absorb the whole timestamp either way.
-  let match = line.match(/^On\s+(.+?)[,\s]+([^<>@,\d:]+?)\s*<([^>\s]+@[^>\s]+)>\s*wrote:?/i);
+  let match = line.match(/^On\s+(.+?)[,\s]+([^<>@,\d:]+?)\s*<([^\s>][^\s>@]*@[^\s>]+)>\s*wrote:?/i);
   if (match) {
     const email = match[3]!.trim();
-    return { name: cleanAttributionName(match[2], email), email, date: parseAttributionDate(match[1]!, match[2]!) };
+    return {
+      name: cleanAttributionName(match[2], email),
+      email,
+      date: parseAttributionDate(match[1]!, match[2]!, refDate),
+    };
   }
 
   // Bare address, no angle brackets: "On 4/17/2026, 2:51:17 PM,
   // anish.sharma3@tcs.com wrote:". Covers numeric-date Outlook and mobile
   // lines, and addresses containing digits — which the name-anchored patterns
   // deliberately exclude.
-  match = line.match(/^On\s+(.+?)[,\s]+([^\s<>,]+@[^\s<>,]+)\s+wrote:?/i);
+  match = line.match(/^On\s+(.+?)[,\s]+([^\s,<>][^\s,<>@]*@[^\s,<>]+)\s+wrote:?/i);
   if (match) {
     const email = extractEmailFrom(match[2]);
-    return { name: cleanAttributionName('', email), email, date: parseHumanDate(match[1]!) };
+    return {
+      name: cleanAttributionName('', email),
+      email,
+      date: parseHumanDate(match[1]!, refDate),
+    };
   }
 
   // Mangled address: "On <date> <name> domain> wrote:" — the client ate the
   // "<local@" of the address, leaving a bare "domain>" before "wrote:".
   match = line.match(/^On\s+(.+?)[,\s]+([^<>@,\d:]+?)\s+[\w.-]+\.\w{2,}>?\s*wrote:?/i);
   if (match) {
-    return { name: cleanAttributionName(match[2]), email: null, date: parseAttributionDate(match[1]!, match[2]!) };
+    return {
+      name: cleanAttributionName(match[2]),
+      email: null,
+      date: parseAttributionDate(match[1]!, match[2]!, refDate),
+    };
   }
 
   // Name only, no address: "On <date>, <name> wrote:"
   match = line.match(/^On\s+(.+?)[,\s]+([^<>,\d:]+?)\s+wrote:?/i);
   if (match) {
-    return { name: cleanAttributionName(match[2]), email: null, date: parseAttributionDate(match[1]!, match[2]!) };
+    return {
+      name: cleanAttributionName(match[2]),
+      email: null,
+      date: parseAttributionDate(match[1]!, match[2]!, refDate),
+    };
   }
 
   // Outlook header block: "From: <name> <email> Sent/Date: <date> To: …".
@@ -182,17 +204,25 @@ export function parseAttribution(text: string): ParsedAttribution | null {
   match = line.match(/^From:\s*(.*?)\s*(?:Sent|Date):\s*(.+?)\s*(?:To:|Cc:|Subject:|$)/i);
   if (match) {
     const email = extractEmailFrom(match[1]);
-    return { name: cleanAttributionName(match[1], email), email, date: parseHumanDate(match[2]!) };
+    return {
+      name: cleanAttributionName(match[1], email),
+      email,
+      date: parseHumanDate(match[2]!, refDate),
+    };
   }
 
   // Attribution with NO "wrote:" (Zoho's `original-sender-line`, some mobile
   // clients): "On <date> <name> <email>". A trailing address is REQUIRED, so an
   // ordinary sentence beginning "On Tuesday we agreed…" cannot be mistaken for
   // an attribution and swallow the paragraph after it.
-  match = line.match(/^On\s+(.+?)[,\s]+([^<>@,\d:]+?)\s*<?([^\s<>,]+@[^\s<>,]+)>?\s*$/i);
+  match = line.match(/^On\s+(.+?)[,\s]+([^<>@,\d:]+?)\s*<?([^\s,<>][^\s,<>@]*@[^\s,<>]+)>?\s*$/i);
   if (match) {
     const email = extractEmailFrom(match[3]);
-    return { name: cleanAttributionName(match[2], email), email, date: parseAttributionDate(match[1]!, match[2]!) };
+    return {
+      name: cleanAttributionName(match[2], email),
+      email,
+      date: parseAttributionDate(match[1]!, match[2]!, refDate),
+    };
   }
 
   return null;

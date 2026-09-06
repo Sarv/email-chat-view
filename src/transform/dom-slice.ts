@@ -26,13 +26,7 @@
  * the same node.
  */
 
-/** `Node.DOCUMENT_POSITION_FOLLOWING`. Not a global in linkedom — see module doc. */
-export const DOCUMENT_POSITION_FOLLOWING = 4;
-
-/** `Node.DOCUMENT_POSITION_CONTAINED_BY`. Not a global in linkedom either. */
-export const DOCUMENT_POSITION_CONTAINED_BY = 16;
-
-/** `NodeFilter.SHOW_TEXT`. Same reason: `NodeFilter` is undefined outside a browser. */
+/** `NodeFilter.SHOW_TEXT`. `NodeFilter` is undefined outside a browser. */
 export const SHOW_TEXT = 4;
 
 /**
@@ -56,6 +50,42 @@ export function pathTo(node: Node, root: Node): number[] | null {
     current = parent;
   }
   return path;
+}
+
+/**
+ * Document order for two {@link pathTo} paths: negative when `a` comes first.
+ *
+ * This exists instead of `compareDocumentPosition`, and not for the reason the
+ * rest of this module exists. The method IS present in linkedom — it is simply
+ * WRONG whenever the receiver is a text node. Verified against linkedom 0.18.13:
+ * for two text nodes in successive paragraphs, `a.compareDocumentPosition(b)`
+ * and `b.compareDocumentPosition(a)` both return `PRECEDING`, which cannot both
+ * be true. A boundary in mail HTML is a text node more often than not, so a sort
+ * built on that method shuffles the segments of a thread into an arbitrary order
+ * and the bubbles come out scrambled — silently, since nothing throws.
+ *
+ * Child-index paths have no such ambiguity: they are the tree's own addressing,
+ * they compare lexicographically, and they are already computed here for the
+ * slice itself.
+ */
+export function comparePaths(a: readonly number[], b: readonly number[]): number {
+  for (let depth = 0; depth < Math.min(a.length, b.length); depth += 1) {
+    if (a[depth] !== b[depth]) return a[depth]! - b[depth]!;
+  }
+  // One path is a prefix of the other: the ancestor opens first.
+  return a.length - b.length;
+}
+
+/**
+ * Whether `ancestor` addresses a STRICT ancestor of `descendant`.
+ *
+ * The path form of `DOCUMENT_POSITION_CONTAINED_BY`. A boundary nested inside
+ * the region a previous boundary already consumed is a duplicate anchor, not a
+ * new message.
+ */
+export function isPathPrefix(ancestor: readonly number[], descendant: readonly number[]): boolean {
+  if (ancestor.length >= descendant.length) return false;
+  return ancestor.every((index, depth) => index === descendant[depth]);
 }
 
 /** The node a {@link pathTo} path addresses, or null when the path does not fit. */

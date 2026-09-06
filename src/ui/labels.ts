@@ -21,6 +21,8 @@ export interface ViewLabels {
   yesterday: string;
   /** Date separator for messages whose timestamp could not be read. */
   unknownDate: string;
+  /** Tooltip prefix on a timestamp that was inferred rather than read. */
+  approximateTime: string;
   /** Shown while a body is still being fetched. */
   bodyLoading: string;
   /** Shown when a body fetch failed permanently. */
@@ -53,11 +55,21 @@ export interface ViewLabels {
   bodyFrameTitle: string;
 }
 
+/**
+ * The subset a date separator can render.
+ *
+ * Date grouping asks for this rather than the whole {@link ViewLabels} so the
+ * signature states what it reads — and so a caller grouping messages outside
+ * the view need only supply three strings. A full `ViewLabels` satisfies it.
+ */
+export type DayLabels = Pick<ViewLabels, 'today' | 'yesterday' | 'unknownDate'>;
+
 /** English defaults. Override any subset via the view's `labels` prop. */
 export const DEFAULT_LABELS: ViewLabels = {
   today: 'Today',
   yesterday: 'Yesterday',
   unknownDate: 'Unknown date',
+  approximateTime: 'Approximate time',
   bodyLoading: 'Loading content…',
   bodyFailed: 'This message could not be downloaded.',
   retry: 'Retry',

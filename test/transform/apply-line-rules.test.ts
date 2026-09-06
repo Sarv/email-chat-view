@@ -11,7 +11,6 @@ import {
 } from '../../src/rules/line.js';
 import type { LineRule } from '../../src/rules/types.js';
 import { applyLineRules } from '../../src/transform/apply-line-rules.js';
-
 import { parseBody, squash } from '../helpers/parser.js';
 
 /** Run the default rule set over a body and report what survived. */
@@ -51,12 +50,15 @@ describe('applyLineRules — cut rules', () => {
   // Regression: the length cap is the only thing separating a footer from a
   // sentence that opens with the same words.
   it('leaves a long line that merely starts like a mobile footer', () => {
-    const body = 'Sent from my phone, sorry for the typos, I could not reach you earlier today at all';
+    const body =
+      'Sent from my phone, sorry for the typos, I could not reach you earlier today at all';
     expect(run(body).html).toBe(body);
   });
 
   it('cuts at Teams join boilerplate', () => {
-    const { html, applied } = run('See you then.<br>Microsoft Teams meeting<br>Join the meeting now');
+    const { html, applied } = run(
+      'See you then.<br>Microsoft Teams meeting<br>Join the meeting now',
+    );
     expect(html).toBe('See you then.<br>');
     expect(applied).toEqual(['meeting-boilerplate']);
   });
@@ -112,7 +114,8 @@ describe('applyLineRules — line rules', () => {
   // middle of a long URL path and deletes the one thing the message was sent to
   // deliver. Only the token boundary — which the scheme's `:` breaks — stops it.
   it('leaves a long URL alone', () => {
-    const body = 'https://example.com/some/very/long/path/that/goes/on/and/on/forever/and/ever/still';
+    const body =
+      'https://example.com/some/very/long/path/that/goes/on/and/on/forever/and/ever/still';
     expect(run(body).html).toBe(body);
   });
 

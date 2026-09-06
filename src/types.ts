@@ -103,6 +103,16 @@ export interface ChatMessage {
   ccNames?: string | null;
   /** Timestamp in epoch MILLISECONDS — always normalized, whatever came in. */
   date: number;
+  /**
+   * True when {@link ChatMessage.date} was INFERRED rather than read.
+   *
+   * A message recovered from a quote frequently has no usable date of its own —
+   * the attribution line says "On Monday" and nothing more — so it is dated
+   * from the mail that quoted it. That is good enough to sort by and not good
+   * enough to state as fact, so the view marks it: a reader comparing a bubble
+   * against their calendar deserves to know which of the two is a guess.
+   */
+  dateApprox?: boolean;
   /** Displayable HTML for this turn only, quoted history and signature removed. */
   body: string;
   /** Attachments worth showing (inline parts already filtered out). */

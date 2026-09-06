@@ -50,23 +50,21 @@ export {
 export type { SenderColor } from './ui/sender-colors.js';
 
 // --- Layout decisions --------------------------------------------------------
-export {
-  DEFAULT_SENDER_RUN_MS,
-  groupMessagesByDate,
-  isSameSenderRun,
-} from './ui/grouping.js';
+export { DEFAULT_SENDER_RUN_MS, groupMessagesByDate, isSameSenderRun } from './ui/grouping.js';
 export type { DateGroup } from './ui/grouping.js';
 export { inspectBody, SIMPLE_TEXT_LIMIT } from './ui/body-shape.js';
 export type { BodyKind, BodyShape, InspectBodyOptions } from './ui/body-shape.js';
 
 // --- Dates -------------------------------------------------------------------
 export {
+  bubbleTimestamp,
   dateGroupLabel,
   formatChatTime,
   formatChatTimestamp,
   formatFullTimestamp,
   isSameLocalDay,
 } from './ui/dates.js';
+export type { BubbleTimestamp } from './ui/dates.js';
 
 // --- Addresses ---------------------------------------------------------------
 export {

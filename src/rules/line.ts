@@ -123,7 +123,7 @@ export const bannerLine: LineRule = {
 export const gibberishBlobLine: LineRule = {
   name: 'encoded-blob',
   provider: 'Common / malformed MIME',
-  pattern: /(?:^|\s)[A-Za-z0-9+/=]{60,}(?:\s|$)/,
+  pattern: /(?:^|\s)[A-Z0-9+/=]{60,}(?:\s|$)/i,
   maxLineLength: Number.MAX_SAFE_INTEGER,
   action: 'line',
 };
@@ -142,3 +142,19 @@ export const lineRules: LineRule[] = [
   bannerLine,
   gibberishBlobLine,
 ];
+
+/**
+ * The two line rules whose marker is UNAMBIGUOUS.
+ *
+ * An RFC 3676 delimiter and "Sent from my …" are conventions with a fixed
+ * spelling; nobody types either by accident. The other four read meaning out of
+ * prose — banner phrasing, meeting boilerplate, a base64-looking run — and each
+ * can be wrong about a real sentence.
+ *
+ * That distinction matters for exactly one caller: a body that was never split,
+ * where the whole thing is one message and no quoted history sits below a
+ * mis-fire to absorb it. Pass this as `lineRules` alongside `bannerRules: []`
+ * and `keepStructure` (see `cleanFragment`) to take the sender's signature
+ * without risking the message around it.
+ */
+export const minimalLineRules: LineRule[] = [signatureDelimiterLine, mobileFooterLine];

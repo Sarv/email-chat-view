@@ -35,7 +35,7 @@ describe('applyMarkerRules', () => {
   it('cuts at the earliest match across all rules', () => {
     const html = 'reply -----Original Message----- mid ---- Forwarded message ---- tail';
     const result = applyMarkerRules(html, [
-      rule('forwarded', [/----+\s*Forwarded message\s*----+/i]),
+      rule('forwarded', [/-{4,}\s*Forwarded message\s*-{4,}/i]),
       rule('original', [/-----\s*Original Message\s*-----/i]),
     ]);
 
@@ -48,7 +48,7 @@ describe('applyMarkerRules', () => {
   // an existing one already cut.
   it('gives the same result whatever order the rules are in', () => {
     const html = 'reply -----Original Message----- mid ---- Forwarded message ---- tail';
-    const forwarded = rule('forwarded', [/----+\s*Forwarded message\s*----+/i]);
+    const forwarded = rule('forwarded', [/-{4,}\s*Forwarded message\s*-{4,}/i]);
     const original = rule('original', [/-----\s*Original Message\s*-----/i]);
 
     expect(applyMarkerRules(html, [forwarded, original])).toEqual(

@@ -90,16 +90,26 @@ describe('cleanAttributionName', () => {
 describe('parseAttribution', () => {
   // Gmail / Apple: comma after the time, angle-bracketed address.
   it('reads the Gmail shape', () => {
-    const parsed = parseAttribution('On Thu, Jul 9, 2026 at 10:52 AM, Rakesh Kumawat <rakesh@sarv.com> wrote:');
+    const parsed = parseAttribution(
+      'On Thu, Jul 9, 2026 at 10:52 AM, Rakesh Kumawat <rakesh@sarv.com> wrote:',
+    );
     expect(parsed).toMatchObject({ name: 'Rakesh Kumawat', email: 'rakesh@sarv.com' });
-    expect(parts(parsed!.date)).toMatchObject({ year: 2026, month: 7, day: 9, hour: 10, minute: 52 });
+    expect(parts(parsed!.date)).toMatchObject({
+      year: 2026,
+      month: 7,
+      day: 9,
+      hour: 10,
+      minute: 52,
+    });
   });
 
   // Regression: Outlook omits the comma after the time, which is why the
   // pattern anchors on the name rather than on punctuation. If the anchor moved
   // back to the comma, every Outlook quote would stop parsing entirely.
   it('reads the Outlook no-comma shape', () => {
-    const parsed = parseAttribution('On Wed, Apr 15, 2026 at 11:02AM Manoj Tewari <manoj@sarv.com> wrote:');
+    const parsed = parseAttribution(
+      'On Wed, Apr 15, 2026 at 11:02AM Manoj Tewari <manoj@sarv.com> wrote:',
+    );
     expect(parsed).toMatchObject({ name: 'Manoj Tewari', email: 'manoj@sarv.com' });
     expect(parts(parsed!.date)).toMatchObject({ month: 4, day: 15, hour: 11, minute: 2 });
   });
@@ -108,7 +118,9 @@ describe('parseAttribution', () => {
   // of the name and then stripped — so "5:06 PM" parsed as 05:06 and the reply
   // sorted above the message it was answering.
   it('gives the meridiem back to the date when the name capture stole it', () => {
-    const parsed = parseAttribution('On Fri, 17 Apr 2026 at 5:06 PM Ankur Dubey <ankur.d@sarv.com> wrote:');
+    const parsed = parseAttribution(
+      'On Fri, 17 Apr 2026 at 5:06 PM Ankur Dubey <ankur.d@sarv.com> wrote:',
+    );
     expect(parsed).toMatchObject({ name: 'Ankur Dubey' });
     expect(parts(parsed!.date)).toMatchObject({ day: 17, hour: 17, minute: 6 });
   });
@@ -182,7 +194,9 @@ describe('parseAttribution', () => {
   // with newlines and doubled spaces wherever the markup had a tag boundary.
   // Without the collapse, none of the anchored patterns match.
   it('matches across the whitespace the HTML flattening leaves behind', () => {
-    const parsed = parseAttribution('On  Thu, Jul 9, 2026\n at 10:52 AM,\tRakesh <rakesh@sarv.com>\n wrote:');
+    const parsed = parseAttribution(
+      'On  Thu, Jul 9, 2026\n at 10:52 AM,\tRakesh <rakesh@sarv.com>\n wrote:',
+    );
     expect(parsed).toMatchObject({ name: 'Rakesh', email: 'rakesh@sarv.com' });
   });
 

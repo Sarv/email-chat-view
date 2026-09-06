@@ -13,8 +13,9 @@
  * build a different layout on the same data.
  */
 import type { ChatMessage } from '../types.js';
+
 import { dateGroupLabel } from './dates.js';
-import type { ViewLabels } from './labels.js';
+import type { DayLabels } from './labels.js';
 
 /** Messages from one sender inside this window read as one turn. */
 export const DEFAULT_SENDER_RUN_MS = 5 * 60 * 1000;
@@ -98,7 +99,7 @@ function localDayKey(dateMs: number): string {
  */
 export function groupMessagesByDate(
   messages: readonly ChatMessage[],
-  labels: ViewLabels,
+  labels: DayLabels,
   locale?: string | string[],
   now?: number,
 ): DateGroup[] {

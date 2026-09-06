@@ -64,14 +64,18 @@ export function applyLineRules(root: Element, rules: readonly LineRule[]): strin
     const line = normalizedText(node);
     if (!line) continue;
 
-    const cut = cutRules.find((rule) => line.length <= rule.maxLineLength && rule.pattern.test(line));
+    const cut = cutRules.find(
+      (rule) => line.length <= rule.maxLineLength && rule.pattern.test(line),
+    );
     if (cut) {
       removeFromNodeOnward(node, root);
       applied.push(cut.name);
       return applied;
     }
 
-    const drop = lineRules.find((rule) => line.length <= rule.maxLineLength && rule.pattern.test(line));
+    const drop = lineRules.find(
+      (rule) => line.length <= rule.maxLineLength && rule.pattern.test(line),
+    );
     if (drop) {
       // Non-null by construction: a TreeWalker over `root`'s descendants never
       // yields a node without a parent.

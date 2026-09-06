@@ -64,16 +64,20 @@ describe('inspectBody', () => {
   // inspection missed turns the protection off silently, which is the one
   // failure mode that cannot be seen in the UI.
   it('spots every remote image scheme, including protocol-relative', () => {
-    for (const source of ['http://x.example/p.gif', 'https://x.example/p.gif', '//x.example/p.gif']) {
+    for (const source of [
+      'http://x.example/p.gif',
+      'https://x.example/p.gif',
+      '//x.example/p.gif',
+    ]) {
       expect(inspectBody(`<p>hi</p><img src="${source}">`, options).hasRemoteImages).toBe(true);
     }
     // Uppercase scheme and stray whitespace in the VALUE, which is what this
     // module normalizes. Attribute-NAME casing (`SRC=`) is the parser's job:
     // the browser `DOMParser` lowercases it during parsing, linkedom does not,
     // so that one is a property of the parser a consumer injects.
-    expect(inspectBody('<p>hi</p><img src="  HTTPS://x.example/p.gif ">', options).hasRemoteImages).toBe(
-      true,
-    );
+    expect(
+      inspectBody('<p>hi</p><img src="  HTTPS://x.example/p.gif ">', options).hasRemoteImages,
+    ).toBe(true);
   });
 
   // Regression: `cid:` is the message's own inline part and `data:` is already

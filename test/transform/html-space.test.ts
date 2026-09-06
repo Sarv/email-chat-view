@@ -8,7 +8,6 @@ import {
   trimEmptyEdges,
   trimTrailingWindowed,
 } from '../../src/transform/html-space.js';
-
 import { parseBody, squash } from '../helpers/parser.js';
 
 describe('trimTrailingWindowed', () => {
@@ -21,16 +20,18 @@ describe('trimTrailingWindowed', () => {
   // loses or duplicates content around the split point.
   it('reconstructs the input exactly when it exceeds the window', () => {
     const body = `${'x'.repeat(100)}   `;
-    expect(trimTrailingWindowed(body, (tail) => tail.replace(/\s+$/, ''), 16)).toBe('x'.repeat(100));
+    expect(trimTrailingWindowed(body, (tail) => tail.replace(/\s+$/, ''), 16)).toBe(
+      'x'.repeat(100),
+    );
   });
 
   // Regression: a trailing empty-tag nest longer than one window. Stopping
   // after the first window would leave dead space behind and make the result
   // depend on the window size, which the contract says it must not.
   it('keeps peeling when a whole window is dead space', () => {
-    expect(trimTrailingWindowed(`keep${' '.repeat(200)}`, (tail) => tail.replace(/\s+$/, ''), 16)).toBe(
-      'keep',
-    );
+    expect(
+      trimTrailingWindowed(`keep${' '.repeat(200)}`, (tail) => tail.replace(/\s+$/, ''), 16),
+    ).toBe('keep');
   });
 
   it('leaves an input with nothing to peel unchanged', () => {
@@ -64,9 +65,13 @@ describe('isEmptyElement', () => {
   // Regression: an image-only block has no text at all and is absolutely
   // content. Treating it as empty deletes the picture somebody sent.
   it('is false for a block whose only content is media or a control', () => {
-    expect(isEmptyElement(parseBody('<div><img src="x.png"></div>').querySelector('div')!)).toBe(false);
+    expect(isEmptyElement(parseBody('<div><img src="x.png"></div>').querySelector('div')!)).toBe(
+      false,
+    );
     expect(isEmptyElement(parseBody('<div><hr></div>').querySelector('div')!)).toBe(false);
-    expect(isEmptyElement(parseBody('<div><button></button></div>').querySelector('div')!)).toBe(false);
+    expect(isEmptyElement(parseBody('<div><button></button></div>').querySelector('div')!)).toBe(
+      false,
+    );
   });
 
   it('is false for an element with text', () => {
@@ -171,7 +176,10 @@ describe('looksDesigned', () => {
     ['two or more tables', '<table><tr><td>a</td></tr></table><table><tr><td>b</td></tr></table>'],
     ['an embedded image', '<p>hi <img src="logo.png"></p>'],
     ['a styled call-to-action', '<a href="#" style="background:#000;padding:8px">Go</a>'],
-    ['four or more inline styles', '<p style="a"></p><p style="b"></p><p style="c"></p><p style="d"></p>'],
+    [
+      'four or more inline styles',
+      '<p style="a"></p><p style="b"></p><p style="c"></p><p style="d"></p>',
+    ],
   ])('is true for %s', (_label, html) => {
     expect(looksDesigned(html)).toBe(true);
   });

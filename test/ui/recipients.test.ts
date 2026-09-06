@@ -145,7 +145,9 @@ describe('formatRecipientLabels', () => {
   });
 
   it('lists one or two recipients in full', () => {
-    expect(formatRecipientLabels([{ address: 'alice@acme.example' }], DEFAULT_LABELS)).toBe('alice');
+    expect(formatRecipientLabels([{ address: 'alice@acme.example' }], DEFAULT_LABELS)).toBe(
+      'alice',
+    );
     expect(
       formatRecipientLabels(
         [

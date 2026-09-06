@@ -65,10 +65,7 @@ function runDomPass(
 }
 
 /** Remove the sender's signature block. */
-export function stripSignature(
-  html: string,
-  options?: StripFamilyOptions<DomRule>,
-): StripResult {
+export function stripSignature(html: string, options?: StripFamilyOptions<DomRule>): StripResult {
   return runDomPass(html, options?.rules ?? defaultSignatureRules, applyDomRules, options);
 }
 
@@ -154,10 +151,7 @@ export function stripDisclaimer(
  * Operates on the string, not the DOM, because these boundaries are text a
  * client injected and frequently sit between elements rather than inside one.
  */
-export function stripMarkers(
-  html: string,
-  options?: StripFamilyOptions<MarkerRule>,
-): StripResult {
+export function stripMarkers(html: string, options?: StripFamilyOptions<MarkerRule>): StripResult {
   if (!html) return { html, applied: [] };
   return applyMarkerRules(html, options?.rules ?? defaultMarkerRules);
 }

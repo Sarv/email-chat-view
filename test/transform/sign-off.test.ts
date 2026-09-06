@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { domToText, isBlockElement } from '../../src/transform/dom-text.js';
+import { signOffPatterns } from '../../src/rules/sign-off.js';
 import { distinctDomainCount } from '../../src/transform/block-shapes.js';
+import { domToText, isBlockElement } from '../../src/transform/dom-text.js';
 import {
   cutSignOff,
   hasStrongSignatureEvidence,
   signOffBlock,
 } from '../../src/transform/sign-off.js';
-
-import { signOffPatterns } from '../../src/rules/sign-off.js';
-
 import { parseBody, squash } from '../helpers/parser.js';
 
 describe('domToText', () => {
@@ -100,7 +98,7 @@ describe('signOffBlock', () => {
       expect(signOffBlock('Body here\nCiao\nAnkur')).toBe('Ciao\nAnkur');
       expect(signOffBlock('Body here\nCiao\nAnkur')).toBe('Ciao\nAnkur');
 
-      signOffPatterns.push(/[ ]*$/m);
+      signOffPatterns.push(/ *$/m);
       expect(signOffBlock('no closing here')).toBeNull();
     } finally {
       signOffPatterns.length = 0;
@@ -229,7 +227,8 @@ describe('cutSignOff', () => {
   // is split across inline elements — no node matches and nothing must be cut,
   // rather than a wrong node being cut.
   it('makes no cut when the anchor line has no single text node', () => {
-    const body = '<div>Some genuinely long body text that is well over the minimum kept size</div>' +
+    const body =
+      '<div>Some genuinely long body text that is well over the minimum kept size</div>' +
       '<div>Th<b>anks</b></div><div>Ankur Dubey</div>';
     expect(cut(body).applied).toBe(false);
   });

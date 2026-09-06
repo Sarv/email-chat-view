@@ -28,6 +28,7 @@ import {
 } from '../ui/frame.js';
 import type { ViewLabels } from '../ui/labels.js';
 import { sanitizeFrameHtml } from '../ui/sanitize.js';
+
 import { ImageOffIcon } from './icons.js';
 
 export interface SandboxedBodyProps {
@@ -70,9 +71,7 @@ export function SandboxedBody({
 
   const srcDoc = useMemo(
     () =>
-      theme
-        ? buildFrameDocument({ html: sanitized, theme, blockRemoteImages: blocked })
-        : null,
+      theme ? buildFrameDocument({ html: sanitized, theme, blockRemoteImages: blocked }) : null,
     [sanitized, theme, blocked],
   );
 

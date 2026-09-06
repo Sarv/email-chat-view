@@ -30,22 +30,25 @@ export const signOffPatterns: RegExp[] = [
   // Leading whitespace is ALLOWED. HTML-to-text conversion indents the `-- `
   // separator, and anchoring to column 0 means the one standardized signature
   // marker goes unrecognised on exactly the HTML mail that needs it most.
-  /^\s*--+\s*$/m, // RFC 3676 `-- `
+  /^\s*-{2,}\s*$/m, // RFC 3676 `-- `
   /^\s*—+\s*$/m, // em dash
-  /^\s*___+\s*$/m, // underscores
+  /^\s*_{3,}\s*$/m, // underscores
   /^Sent from my (iPhone|iPad|Android)/im, // mobile footer
 
   // Trailing punctuation is OPTIONAL and unrestricted: real mail is full of
   // "Regards!", "Thanks :)" and "Best -", and a comma-only pattern matches none
   // of them. When nothing matches there is no signature block at all, and the
   // card stays in the bubble.
-  /^(Best|Kind|Warm)\s+regards?\b[!.,:;)\s-]*$/im,
+  //
+  // No `\b` before the punctuation class: the class holds no word characters,
+  // so the boundary can never fail and only reads like it is doing work.
+  /^(Best|Kind|Warm)\s+regards?[!.,:;)\s-]*$/im,
   // Combined sign-offs: "Thanks & Regards", "Thank you and Regards",
   // "Thanks, Regards" — extremely common, and none of them match the patterns
   // above or below.
-  /^(Thanks?|Thank you|Best|Kind|Warm)\s*(&|and|n|,)\s*regards?\b[!.,:;)\s-]*$/im,
-  /^(Thanks|Thank you|Regards|Sincerely|Cheers|Best|Br|Rgds)\b[!.,:;)\s-]*$/im,
-  /^(Yours (sincerely|faithfully|truly))\b[!.,:;)\s-]*$/im,
+  /^(Thanks?|Thank you|Best|Kind|Warm)\s*([&n,]|and)\s*regards?[!.,:;)\s-]*$/im,
+  /^(Thanks|Thank you|Regards|Sincerely|Cheers|Best|Br|Rgds)[!.,:;)\s-]*$/im,
+  /^(Yours (sincerely|faithfully|truly))[!.,:;)\s-]*$/im,
 ];
 
 /**

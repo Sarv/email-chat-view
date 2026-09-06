@@ -36,7 +36,11 @@ describe('stripSignature', () => {
     ['Gmail (dash prefix)', '<span class="gmail_signature_prefix">-- </span>', 'gmail'],
     ['Apple Mail', '<div class="AppleMailSignature">Sent from my iPhone</div>', 'apple-mail'],
     ['Thunderbird (div)', '<div class="moz-signature">-- <br>Me</div>', 'thunderbird'],
-    ['Thunderbird (table)', '<table class="moz-signature"><tr><td>Me</td></tr></table>', 'thunderbird'],
+    [
+      'Thunderbird (table)',
+      '<table class="moz-signature"><tr><td>Me</td></tr></table>',
+      'thunderbird',
+    ],
     ['Outlook Mobile', '<div id="ms-outlook-mobile-signature">Get Outlook</div>', 'outlook-mobile'],
     ['Outlook desktop', '<div id="Signature">Regards, me</div>', 'outlook-desktop'],
     ['Generic', '<div class="email-signature">Regards</div>', 'generic'],
@@ -114,7 +118,11 @@ describe('stripQuote', () => {
     ['Outlook modern reply', '<div id="divRplyFwdMsg">From: Bob</div>', 'outlook-modern'],
     ['Outlook modern prefixed', '<div id="x_divRplyFwdMsg_1">From: Bob</div>', 'outlook-modern'],
     ['Outlook appendonsend', '<div id="appendonsend"></div><div>old</div>', 'outlook-modern'],
-    ['webmail reference', '<div id="mail-editor-reference-message-container">old</div>', 'webmail-reference-container'],
+    [
+      'webmail reference',
+      '<div id="mail-editor-reference-message-container">old</div>',
+      'webmail-reference-container',
+    ],
     ['bare blockquote', '<blockquote>old</blockquote>', 'bare-blockquote'],
   ])('removes a %s quote container', (_provider, quote, ruleName) => {
     const result = stripQuote(`<p>My reply.</p>${quote}`, options);
@@ -248,8 +256,7 @@ describe('stripLines', () => {
   // and the paragraph it will otherwise eat, and `action: 'cut'` means eating
   // it takes the rest of the message too.
   it('leaves a long line that opens like a mobile footer', () => {
-    const html =
-      '<p>Sent from my desk this time, and I have finally read the whole contract.</p>';
+    const html = '<p>Sent from my desk this time, and I have finally read the whole contract.</p>';
     expect(stripLines(html, options)).toEqual({ html, applied: [] });
   });
 
@@ -323,10 +330,7 @@ describe('stripDisclaimer', () => {
   // that starts with the company name — the majority of gateway-appended ones
   // — is still caught. Without the waiver almost none of them would be.
   it('removes boilerplate after an <hr> even when it opens with a company name', () => {
-    const result = stripDisclaimer(
-      `<p>Reply.</p><hr><p>Acme Corp. ${FOOTER}</p>`,
-      options,
-    );
+    const result = stripDisclaimer(`<p>Reply.</p><hr><p>Acme Corp. ${FOOTER}</p>`, options);
     expect(result.applied).toEqual(['english-corporate']);
     expect(squash(result.html)).toBe('<p>Reply.</p>');
   });

@@ -21,9 +21,7 @@ function bubblesIn(container: HTMLElement) {
 /** The observer watching the bubbles, as opposed to the top sentinel. */
 function rangeObserver() {
   const found = FakeIntersectionObserver.instances.find((observer) =>
-    observer.targets.some(
-      (target) => (target as HTMLElement).dataset?.secIndex !== undefined,
-    ),
+    observer.targets.some((target) => (target as HTMLElement).dataset?.secIndex !== undefined),
   );
   if (!found) throw new Error('no observer is watching any bubble');
   return found;
@@ -71,9 +69,9 @@ describe('MailChatView', () => {
       ],
       labels: { today: 'Aujourd’hui', yesterday: 'Hier' },
     });
-    expect([...container.querySelectorAll('.sec-date-sep__label')].map((l) => l.textContent)).toEqual(
-      ['Hier', 'Aujourd’hui'],
-    );
+    expect(
+      [...container.querySelectorAll('.sec-date-sep__label')].map((l) => l.textContent),
+    ).toEqual(['Hier', 'Aujourd’hui']);
   });
 
   describe('sender runs', () => {
@@ -259,13 +257,41 @@ describe('MailChatView', () => {
       expect(onVisibleRangeChange).toHaveBeenCalledTimes(1);
     });
 
+    // Regression: `useLatest` is the whole reason the observer effect can leave
+    // the host's callback out of its dependencies, and it writes its ref in an
+    // effect rather than during render. If that write ever stops landing before
+    // the observer fires, the view reports visibility into a callback the host
+    // has already replaced — body fetches get prioritised through a closure
+    // over the previous thread, and the reader waits on the wrong bodies.
+    it('reports to the callback from the latest render, not the first one', () => {
+      installIntersectionObserver();
+      const first = vi.fn();
+      const second = vi.fn();
+      const messages = thread(4);
+      const { container, rerender } = render(
+        <MailChatView messages={messages} locale="en-GB" now={NOW} onVisibleRangeChange={first} />,
+      );
+      rerender(
+        <MailChatView messages={messages} locale="en-GB" now={NOW} onVisibleRangeChange={second} />,
+      );
+
+      act(() => {
+        rangeObserver().emit([{ target: bubblesIn(container)[1], isIntersecting: true }]);
+      });
+
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenLastCalledWith({ firstIndex: 1, lastIndex: 1, ids: ['m1'] });
+    });
+
     it('ignores an element that is not one of its bubbles', () => {
       installIntersectionObserver();
       const onVisibleRangeChange = vi.fn();
       renderView({ onVisibleRangeChange });
 
       act(() => {
-        rangeObserver().emit([{ target: { dataset: { secIndex: 'not-a-number' } }, isIntersecting: true }]);
+        rangeObserver().emit([
+          { target: { dataset: { secIndex: 'not-a-number' } }, isIntersecting: true },
+        ]);
       });
       expect(onVisibleRangeChange).not.toHaveBeenCalled();
     });
@@ -299,7 +325,11 @@ describe('MailChatView', () => {
     it('renders the thread where there is no IntersectionObserver at all', () => {
       expect(typeof IntersectionObserver).toBe('undefined');
       const onVisibleRangeChange = vi.fn();
-      const { container } = renderView({ onVisibleRangeChange, hasOlder: true, onLoadOlder: vi.fn() });
+      const { container } = renderView({
+        onVisibleRangeChange,
+        hasOlder: true,
+        onLoadOlder: vi.fn(),
+      });
       expect(bubblesIn(container)).toHaveLength(4);
       expect(onVisibleRangeChange).not.toHaveBeenCalled();
     });

@@ -6,7 +6,11 @@ import { AttachmentChip } from '../../src/components/AttachmentChip.js';
 import type { Attachment } from '../../src/types.js';
 import { DEFAULT_LABELS } from '../../src/ui/labels.js';
 
-const pdf: Attachment = { filename: 'Q3 report.pdf', mimeType: 'application/pdf', sizeBytes: 20_480 };
+const pdf: Attachment = {
+  filename: 'Q3 report.pdf',
+  mimeType: 'application/pdf',
+  sizeBytes: 20_480,
+};
 
 describe('AttachmentChip', () => {
   it('shows the filename and its size', () => {

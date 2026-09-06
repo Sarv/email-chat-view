@@ -29,7 +29,7 @@ function firstElement(html: string): Element {
 }
 
 const PHONE = /\+?\d[\d ().-]{7,}\d/;
-const WEB = /www\.[a-z0-9-]+\.[a-z]{2,}|https?:\/\/|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+const WEB = /www\.[a-z0-9-]+\.[a-z]{2,}|https?:\/\/|[\w.%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 
 describe('containsQuote', () => {
   // Regression: the guard every shape predicate opens with. A quote is somebody
@@ -126,9 +126,7 @@ describe('isPureBannerBlock', () => {
 
   it('rejects a block holding quoted history', () => {
     expect(
-      isPureBanner(
-        firstElement('<div><p>External sender</p><blockquote>older</blockquote></div>'),
-      ),
+      isPureBanner(firstElement('<div><p>External sender</p><blockquote>older</blockquote></div>')),
     ).toBe(false);
   });
 
@@ -137,9 +135,7 @@ describe('isPureBannerBlock', () => {
   // with an empty cell.
   it('ignores empty leaves', () => {
     expect(
-      isPureBanner(
-        firstElement('<div><p></p><p>Confidentiality notice</p><p>   </p></div>'),
-      ),
+      isPureBanner(firstElement('<div><p></p><p>Confidentiality notice</p><p>   </p></div>')),
     ).toBe(true);
   });
 
@@ -212,9 +208,7 @@ describe('isContactCard', () => {
   // signature on its own, and prose never lists two of them.
   it('accepts a links strip with two domains and no phone', () => {
     expect(
-      isCard(
-        firstElement('<table><tr><td>sarv.com | deepcall.com | enquiry.ai</td></tr></table>'),
-      ),
+      isCard(firstElement('<table><tr><td>sarv.com | deepcall.com | enquiry.ai</td></tr></table>')),
     ).toBe(true);
   });
 

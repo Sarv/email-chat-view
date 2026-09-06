@@ -39,8 +39,22 @@ export interface Purifier {
 
 /** Tags the inline path keeps. Anything else is unwrapped, children intact. */
 export const INLINE_ALLOWED_TAGS = [
-  'p', 'div', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'a', 'span',
-  'ul', 'ol', 'li', 'code', 'blockquote',
+  'p',
+  'div',
+  'br',
+  'b',
+  'strong',
+  'i',
+  'em',
+  'u',
+  's',
+  'a',
+  'span',
+  'ul',
+  'ol',
+  'li',
+  'code',
+  'blockquote',
 ];
 
 /** The only attribute the inline path keeps. */
@@ -80,7 +94,18 @@ const FRAME_CONFIG: Record<string, unknown> = {
   ALLOWED_URI_REGEXP: /^(?:https?|mailto|cid|data):/i,
   ALLOW_UNKNOWN_PROTOCOLS: false,
   ALLOW_DATA_ATTR: false,
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'base', 'meta', 'link'],
+  FORBID_TAGS: [
+    'script',
+    'iframe',
+    'object',
+    'embed',
+    'form',
+    'input',
+    'button',
+    'base',
+    'meta',
+    'link',
+  ],
   FORBID_ATTR: ['formaction', 'action', 'srcdoc', 'ping'],
 };
 

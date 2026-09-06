@@ -212,12 +212,18 @@ describe('SandboxedBody', () => {
     // the policy, and the banner is only the way the reader lifts it.
     it('withholds them until the reader asks, then lets them through', () => {
       const { container } = render(
-        <SandboxedBody html='<img src="https://x.example/p.gif">' labels={DEFAULT_LABELS} hasRemoteImages />,
+        <SandboxedBody
+          html='<img src="https://x.example/p.gif">'
+          labels={DEFAULT_LABELS}
+          hasRemoteImages
+        />,
       );
       expect(frameOf(container).getAttribute('srcdoc')).toContain('img-src data: cid:;');
 
       fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
-      expect(frameOf(container).getAttribute('srcdoc')).toContain('img-src data: cid: https: http:');
+      expect(frameOf(container).getAttribute('srcdoc')).toContain(
+        'img-src data: cid: https: http:',
+      );
       // Once lifted, the banner has nothing left to offer.
       expect(screen.queryByRole('button', { name: 'Load images' })).toBeNull();
     });
@@ -246,7 +252,9 @@ describe('SandboxedBody', () => {
         />,
       );
       expect(screen.queryByRole('button', { name: 'Load images' })).toBeNull();
-      expect(frameOf(container).getAttribute('srcdoc')).toContain('img-src data: cid: https: http:');
+      expect(frameOf(container).getAttribute('srcdoc')).toContain(
+        'img-src data: cid: https: http:',
+      );
     });
   });
 });

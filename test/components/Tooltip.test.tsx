@@ -28,9 +28,7 @@ const ZERO: DOMRect = {
  * `null` for either box means "this element cannot be measured".
  */
 function stubRects(rects: { trigger?: Partial<DOMRect> | null; bubble?: Partial<DOMRect> | null }) {
-  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
-    this: Element,
-  ) {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     const rect = this.classList.contains('sec-tooltip') ? rects.bubble : rects.trigger;
     if (rect === null) return undefined as unknown as DOMRect;
     return { ...ZERO, ...rect };

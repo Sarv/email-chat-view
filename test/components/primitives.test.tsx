@@ -74,7 +74,9 @@ describe('Avatar', () => {
 
   it('takes the surface colour when no identity colour is given', () => {
     const { container } = render(<Avatar address="me@acme.example" />);
-    expect((container.querySelector('.sec-avatar') as HTMLElement).getAttribute('style')).toBeNull();
+    expect(
+      (container.querySelector('.sec-avatar') as HTMLElement).getAttribute('style'),
+    ).toBeNull();
   });
 
   // Regression: THE reason the spacer exists. A follow-up bubble in a sender run

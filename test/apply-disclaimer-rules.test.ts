@@ -46,9 +46,7 @@ describe('applyDisclaimerRules', () => {
     // supplies the boundary. If it were required, most gateway footers (which
     // start with a company name, not "This email") would survive.
     it('does not require `opens` when an <hr> supplies the boundary', () => {
-      const body = parseBody(
-        `<p>Reply.</p><hr><p>Acme Ltd. ${DISCLAIMER}</p>`,
-      );
+      const body = parseBody(`<p>Reply.</p><hr><p>Acme Ltd. ${DISCLAIMER}</p>`);
       expect(applyDisclaimerRules(body, [strict])).toEqual(['strict']);
       expect(squash(body.innerHTML)).toBe('<p>Reply.</p>');
     });
@@ -74,9 +72,7 @@ describe('applyDisclaimerRules', () => {
     // in its tail — scanned front-to-back, the rule fires on the early divider
     // and deletes every genuine paragraph between the two. Found by this test.
     it('cuts at the latest boilerplate divider, not an earlier decorative one', () => {
-      const body = parseBody(
-        `<p>Reply.</p><hr><p>More content.</p><hr><p>${DISCLAIMER}</p>`,
-      );
+      const body = parseBody(`<p>Reply.</p><hr><p>More content.</p><hr><p>${DISCLAIMER}</p>`);
       expect(applyDisclaimerRules(body, [lenient])).toEqual(['lenient']);
       expect(squash(body.innerHTML)).toBe('<p>Reply.</p><hr><p>More content.</p>');
     });
@@ -85,9 +81,7 @@ describe('applyDisclaimerRules', () => {
     // divider's tail is too short to judge, the walk steps back and takes more
     // rather than giving up — a disclaimer with an internal <hr> still goes.
     it('steps back to an earlier divider when the last tail is too short to judge', () => {
-      const body = parseBody(
-        `<p>Reply.</p><hr><p>${DISCLAIMER}</p><hr><p>Ref 41</p>`,
-      );
+      const body = parseBody(`<p>Reply.</p><hr><p>${DISCLAIMER}</p><hr><p>Ref 41</p>`);
       expect(applyDisclaimerRules(body, [strict])).toEqual(['strict']);
       expect(squash(body.innerHTML)).toBe('<p>Reply.</p>');
     });

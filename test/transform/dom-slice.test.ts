@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  comparePaths,
+  isPathPrefix,
   nodeAtPath,
   pathTo,
   removeFromNodeOnward,
   removeUpToNodeInclusive,
   sliceBetween,
 } from '../../src/transform/dom-slice.js';
-
 import { parseBody, squash } from '../helpers/parser.js';
 
 /** The node whose text is exactly `text`, searched breadth-first over childNodes. */
@@ -76,6 +77,57 @@ describe('pathTo / nodeAtPath', () => {
     const body = parseBody('<p>x</p>');
     expect(nodeAtPath(body, [5])).toBeNull();
     expect(nodeAtPath(body, [0, 0, 0, 0])).toBeNull();
+  });
+});
+
+describe('comparePaths', () => {
+  // Regression: this replaces `compareDocumentPosition`, which linkedom answers
+  // WRONG for text-node receivers — two text nodes each reported as preceding
+  // the other. Boundaries in mail HTML are text nodes more often than not, so a
+  // wrong answer here shuffles a thread's bubbles into an arbitrary order with
+  // nothing thrown and nothing logged.
+  it.each([
+    ['an earlier sibling first', [0, 1], [0, 2], -1],
+    ['a later sibling last', [3], [1, 9], 1],
+    ['equal paths as equal', [1, 4], [1, 4], 0],
+    ['an ancestor before its descendant', [2], [2, 0], -1],
+    ['a descendant after its ancestor', [2, 0, 7], [2], 1],
+  ])('orders %s', (_label, left, right, expected) => {
+    expect(Math.sign(comparePaths(left, right))).toBe(expected);
+  });
+
+  // Regression: the comparator has to be antisymmetric or `Array.sort` produces
+  // an implementation-defined order — the exact failure the linkedom bug caused.
+  it('is antisymmetric on every pair', () => {
+    // `|| 0` folds `-0` into `0`: negating a zero sign yields `-0`, which is
+    // equal to `0` everywhere except in the strict comparison this assertion uses.
+    const sign = (value: number): number => Math.sign(value) || 0;
+    const paths = [[0], [0, 0], [0, 1], [1], [1, 2, 3], [2]];
+    for (const left of paths) {
+      for (const right of paths) {
+        expect(sign(comparePaths(left, right))).toBe(sign(-comparePaths(right, left)));
+      }
+    }
+  });
+});
+
+describe('isPathPrefix', () => {
+  // Regression: a boundary nested inside the region a previous boundary already
+  // consumed is a duplicate anchor. Missing that containment emits a second
+  // segment for one attribution — an empty bubble between two real messages.
+  it('reports a strict ancestor', () => {
+    expect(isPathPrefix([1], [1, 0, 4])).toBe(true);
+  });
+
+  // The other half: containment must be STRICT. A path is not nested inside
+  // itself, and a shorter-or-equal path can never be inside a longer region —
+  // treating either as nested would drop a real boundary and merge two messages.
+  it.each([
+    ['an identical path', [1, 0], [1, 0]],
+    ['a longer path', [1, 0, 4], [1, 0]],
+    ['a sibling branch', [1], [2, 0]],
+  ])('rejects %s', (_label, ancestor, descendant) => {
+    expect(isPathPrefix(ancestor, descendant)).toBe(false);
   });
 });
 

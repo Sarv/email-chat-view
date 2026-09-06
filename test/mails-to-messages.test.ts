@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Mail } from '../src/types.js';
 import {
   createBodyCache,
   mailsToMessages,
   mailToMessage,
 } from '../src/transform/mails-to-messages.js';
+import type { Mail } from '../src/types.js';
 
 import { parser } from './helpers/parser.js';
 
@@ -243,7 +243,11 @@ describe('mailsToMessages', () => {
   // is normalized here rather than trusted from the caller.
   it('sorts oldest first whatever order it is given', () => {
     const messages = mailsToMessages(
-      [mail({ id: 'c', date: MARCH_5 }), mail({ id: 'a', date: MARCH_3 }), mail({ id: 'b', date: MARCH_4 })],
+      [
+        mail({ id: 'c', date: MARCH_5 }),
+        mail({ id: 'a', date: MARCH_3 }),
+        mail({ id: 'b', date: MARCH_4 }),
+      ],
       options,
     );
 
@@ -429,7 +433,10 @@ describe('mailsToMessages', () => {
     mailsToMessages(pending, { ...options, cache, ...stripOptions });
     const afterFirstPass = stripOptions.parser.mock.calls.length;
 
-    const arrived = [pending[0] as Mail, mail({ id: '2', date: MARCH_4, body: `<p>Two</p>${signature}` })];
+    const arrived = [
+      pending[0] as Mail,
+      mail({ id: '2', date: MARCH_4, body: `<p>Two</p>${signature}` }),
+    ];
     const messages = mailsToMessages(arrived, { ...options, cache, ...stripOptions });
     const parsesForTheNewBody = stripOptions.parser.mock.calls.length - afterFirstPass;
 

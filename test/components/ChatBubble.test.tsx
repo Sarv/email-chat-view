@@ -47,7 +47,9 @@ describe('ChatBubble', () => {
     // The reader's own bubble is the brand tint from the stylesheet; an
     // identity colour on top of it would make the reader look like a stranger.
     expect((container.querySelector('.sec-bubble') as HTMLElement).style.backgroundColor).toBe('');
-    expect((container.querySelector('.sec-avatar') as HTMLElement).getAttribute('style')).toBeNull();
+    expect(
+      (container.querySelector('.sec-avatar') as HTMLElement).getAttribute('style'),
+    ).toBeNull();
   });
 
   // Regression: attributing someone else's mail to the reader is a much worse
@@ -55,7 +57,11 @@ describe('ChatBubble', () => {
   // must fall to the left — never to the right.
   it('keeps an unattributed message on the left', () => {
     const { container } = render(
-      <ChatBubble message={chatMessage({ isFromMe: undefined })} labels={DEFAULT_LABELS} {...FIXED} />,
+      <ChatBubble
+        message={chatMessage({ isFromMe: undefined })}
+        labels={DEFAULT_LABELS}
+        {...FIXED}
+      />,
     );
     expect(container.querySelector('.sec-row')?.className).toContain('sec-row--theirs');
   });
@@ -103,7 +109,12 @@ describe('ChatBubble', () => {
 
   it('lets the host decide whose message it is', () => {
     const { container } = render(
-      <ChatBubble message={chatMessage({ isFromMe: false })} mine labels={DEFAULT_LABELS} {...FIXED} />,
+      <ChatBubble
+        message={chatMessage({ isFromMe: false })}
+        mine
+        labels={DEFAULT_LABELS}
+        {...FIXED}
+      />,
     );
     expect(container.querySelector('.sec-row')?.className).toContain('sec-row--mine');
   });
@@ -174,9 +185,29 @@ describe('ChatBubble', () => {
     // downstream, so one bad header cannot take the bubble down.
     it('renders no time element at all for a date it cannot read', () => {
       const { container } = render(
-        <ChatBubble message={chatMessage({ date: Number.NaN })} labels={DEFAULT_LABELS} {...FIXED} />,
+        <ChatBubble
+          message={chatMessage({ date: Number.NaN })}
+          labels={DEFAULT_LABELS}
+          {...FIXED}
+        />,
       );
       expect(container.querySelector('time')).toBeNull();
+    });
+
+    // Regression: a message recovered from a quote is dated from the mail that
+    // quoted it. Rendered as an exact time it reads as fact, and a reader
+    // checking a bubble against their calendar has nothing to warn them.
+    it('marks a time the transform inferred', () => {
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage({ dateApprox: true })}
+          labels={DEFAULT_LABELS}
+          {...FIXED}
+        />,
+      );
+      const time = container.querySelector('time') as HTMLTimeElement;
+      expect(time.textContent).toBe('~10:00');
+      expect(time.getAttribute('title')).toContain(DEFAULT_LABELS.approximateTime);
     });
   });
 
@@ -279,7 +310,12 @@ describe('ChatBubble', () => {
 
   it('takes a class from its host', () => {
     const { container } = render(
-      <ChatBubble message={chatMessage()} labels={DEFAULT_LABELS} className="app-bubble" {...FIXED} />,
+      <ChatBubble
+        message={chatMessage()}
+        labels={DEFAULT_LABELS}
+        className="app-bubble"
+        {...FIXED}
+      />,
     );
     expect(container.querySelector('.sec-row')?.className).toBe(
       'sec-row sec-row--theirs app-bubble',
