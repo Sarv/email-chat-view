@@ -54,7 +54,7 @@ import type { DomRule } from './types.js';
  * "this line is the stamp and contains nothing else".
  */
 export const bannerPattern =
-  /(external e-?mail|external sender|originated from outside|outside (of )?(the |your )?organi[sz]ation|caution\b|be cautious|do not (click|open)|unless you recognize the sender|you don['’]?t often get email from|some people who received this message don['’]?t often get|learn why this is important|this (e-?mail|message)\b.{0,80}\b(confidential|intended|privileged)|confidentiality notice|\bdisclaimer\b|intended (solely |only )?for the (use|addressee)|notify the sender|delete (it|this e-?mail)|^[a-z&. ]{0,20}confidential(\s*[&-]?\s*(and\s+)?(proprietary|internal|restricted))?$)/i;
+  /(external e-?mail|external sender|originated from outside|outside (of )?(the |your )?organi[sz]ation|caution\b|be cautious|do not (click|open)|unless you recognize the sender|you don['’]?t often get email from|some people who received this message don['’]?t often get|learn why this is important|this (e-?mail|message)\b.{1,80}\b(confidential|intended|privileged)|confidentiality notice|\bdisclaimer\b|intended (solely |only )?for the (use|addressee)|notify the sender|delete (it|this e-?mail)|^[a-z&. ]{0,20}confidential(\s*(?:[&-]\s*)?(and\s+)?(proprietary|internal|restricted))?$)/i;
 
 /**
  * Length cap for a WHOLE BLOCK proven to be nothing but banner text.

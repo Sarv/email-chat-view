@@ -64,7 +64,9 @@ export function classifyMail(
   let score = 0;
 
   for (const signal of signals) {
-    let hit = false;
+    // No initialiser: the `continue` covers the only path that leaves it unset,
+    // so a default would be a value nothing can ever read.
+    let hit: boolean;
     try {
       hit = signal.test(normalized);
     } catch {

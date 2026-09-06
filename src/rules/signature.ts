@@ -157,7 +157,7 @@ export const CONTACT_PHONE_RE = /\+?\d[\d ().-]{7,}\d/;
  * rule exists for.
  */
 export const CONTACT_WEB_RE =
-  /www\.[a-z0-9-]+\.[a-z]{2,}|https?:\/\/|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+  /www\.[a-z0-9-]+\.[a-z]{2,}|https?:\/\/|[\w.%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 
 /**
  * Text budget for a block to still be signature furniture rather than a

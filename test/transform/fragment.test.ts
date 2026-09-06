@@ -11,7 +11,6 @@ import {
   unwrapIndentBars,
   unwrapQuoteWrappers,
 } from '../../src/transform/fragment.js';
-
 import { parseBody, squash } from '../helpers/parser.js';
 
 describe('drawsLeftBorder', () => {

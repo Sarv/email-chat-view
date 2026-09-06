@@ -166,7 +166,9 @@ export function inspectBody(
 
   const { parser, textLimit = SIMPLE_TEXT_LIMIT } = options;
 
-  let body: Element | null = null;
+  // No initialiser: the `catch` returns, so the only way past this block is
+  // with the parse result assigned.
+  let body: Element | null;
   try {
     body = resolveParser(parser)(source).body;
   } catch {

@@ -1,0 +1,28 @@
+# Editor defaults, so a contributor's first save matches the repo before any
+# tooling runs. Prettier is the authority on formatting (.prettierrc.json) and
+# CI checks it; this file only stops an editor from fighting it in the meantime.
+#
+# https://editorconfig.org — supported natively by VS Code, JetBrains, Zed and
+# Visual Studio, and by a plugin everywhere else.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+[*.md]
+# Two trailing spaces are a hard line break in Markdown; stripping them silently
+# reflows a paragraph.
+trim_trailing_whitespace = false
+max_line_length = 80
+
+[*.{yml,yaml}]
+max_line_length = 80
+
+[Makefile]
+indent_style = tab

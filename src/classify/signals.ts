@@ -119,7 +119,7 @@ const UNSUBSCRIBE =
  * inline `width:1px;height:1px` style. Humans never embed these.
  */
 const TRACKING_PIXEL =
-  /<img\b[^>]*?(?:width\s*=\s*["']?1["']?[^>]*?height\s*=\s*["']?1["']?|height\s*=\s*["']?1["']?[^>]*?width\s*=\s*["']?1["']?|style\s*=\s*["'][^"']*?width\s*:\s*1px[^"']*?height\s*:\s*1px)/i;
+  /<img\b[^>]+?(?:width\s*=\s*["']?1["']?[^>]*?height\s*=\s*["']?1["']?|height\s*=\s*["']?1["']?[^>]*?width\s*=\s*["']?1["']?|style\s*=\s*["'][^"']*?width\s*:\s*1px[^"']*?height\s*:\s*1px)/i;
 
 /** Merge tags a template engine failed to render. */
 const PLACEHOLDER =
@@ -127,7 +127,7 @@ const PLACEHOLDER =
 
 /** Sender local-parts that only ever send automated mail. */
 const NOREPLY =
-  /(?:no[-_.]?reply|donotreply|do[-_.]?not[-_.]?reply)|^(?:notifications?|mailer|mailer-daemon|bounce[-+.\w]*|postmaster|automated?|system)@/i;
+  /no[-_.]?reply|do[-_.]?not[-_.]?reply|^(?:notifications?|mailer|mailer-daemon|bounce[-+.\w]*|postmaster|automated?|system)@/i;
 
 /** Whether a Message-ID's domain belongs to a known ESP. */
 export function hasEspMessageIdDomain(messageId: string): boolean {

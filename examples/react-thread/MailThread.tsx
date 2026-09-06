@@ -13,7 +13,7 @@
  *     host's, because a component that reached for `window.open` or an Electron
  *     IPC channel of its own would work in exactly one application.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   createBodyCache,
@@ -57,8 +57,11 @@ export function MailThread({
    * message 3's key: that one is re-cleaned and the other 199 are served from
    * the cache. A cache recreated each render would re-clean all 200 every time
    * a body lands, which on a large thread is the whole cost of the feature.
+   *
+   * `useState` with a lazy initialiser rather than a ref: the function runs
+   * once, the value never changes, and nothing reads a ref during render.
    */
-  const cache = useRef(createBodyCache()).current;
+  const [cache] = useState(createBodyCache);
 
   const messages = useMemo(
     () =>

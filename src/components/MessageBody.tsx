@@ -17,6 +17,7 @@ import type { BodyShape } from '../ui/body-shape.js';
 import { clickedHref } from '../ui/frame.js';
 import type { ViewLabels } from '../ui/labels.js';
 import { sanitizeInlineHtml } from '../ui/sanitize.js';
+
 import { AlertTriangleIcon, SpinnerIcon } from './icons.js';
 import { SandboxedBody } from './SandboxedBody.js';
 

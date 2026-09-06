@@ -9,6 +9,7 @@
 import type { Attachment } from '../types.js';
 import { formatFileSize, isPreviewable } from '../ui/attachments.js';
 import type { ViewLabels } from '../ui/labels.js';
+
 import { DownloadIcon, EyeIcon, PaperclipIcon } from './icons.js';
 import { Tooltip } from './Tooltip.js';
 

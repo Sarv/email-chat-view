@@ -14,6 +14,25 @@ permissions:
   contents: read
 
 jobs:
+  # Style and static analysis. One job, one platform, one Node version — the
+  # answer cannot differ across the matrix, and running it nine times would only
+  # cost nine times as long to tell a contributor the same thing.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `--max-warnings` is pinned in the script to the ReDoS backlog that
+      # existed when the linter was adopted, so the old ones survive and a new
+      # one fails here. See the comment in eslint.config.js.
+      - run: pnpm lint
+      - run: pnpm format:check
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:

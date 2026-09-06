@@ -135,7 +135,9 @@ export function describeRecipients(
   maxShown = 2,
 ): RecipientSummary {
   if (!recipients.length) return { names: '', more: '' };
-  const shown = recipients.slice(0, maxShown).map((recipient) => shortNameFor(recipient.address, recipient.name));
+  const shown = recipients
+    .slice(0, maxShown)
+    .map((recipient) => shortNameFor(recipient.address, recipient.name));
   const hidden = recipients.length - shown.length;
   return {
     names: shown.join(', '),

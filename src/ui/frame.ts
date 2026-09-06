@@ -142,14 +142,14 @@ export function buildFrameDocument({
   // `cid:` covers the message's own inline parts, `data:` the ones already
   // embedded. Neither touches the network, so both are allowed even while
   // remote images are blocked — a signature logo is not a tracking pixel.
-  const localSources = "data: cid:";
+  const localSources = 'data: cid:';
   const imageSources = blockRemoteImages ? localSources : `${localSources} https: http:`;
   const policy = [
     "default-src 'none'",
     `img-src ${imageSources}`,
     `media-src ${imageSources}`,
     "style-src 'unsafe-inline'",
-    "font-src data:",
+    'font-src data:',
   ].join('; ');
 
   return [

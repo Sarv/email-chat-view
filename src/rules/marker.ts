@@ -42,7 +42,7 @@ export const forwardedMessage: MarkerRule = {
   name: 'forwarded-message',
   provider: 'Gmail / multi-client',
   language: 'en',
-  patterns: [/----+\s*Forwarded message\s*----+/i],
+  patterns: [/-{4,}\s*Forwarded message\s*-{4,}/i],
 };
 
 /** "-----Original Message-----" */

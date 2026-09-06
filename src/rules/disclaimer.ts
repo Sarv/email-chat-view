@@ -32,7 +32,7 @@ export const englishDisclaimer: DisclaimerRule = {
   provider: 'Mail gateways / corporate appenders',
   language: 'en',
   opens:
-    /^(?:this (?:e-?mail|email|message|communication)|disclaimer|email disclaimer|confidentiality notice|notice:|the (?:information|contents?) (?:of|contained|in))/i,
+    /^(?:this (?:e-?mail|message|communication)|disclaimer|email disclaimer|confidentiality notice|notice:|the (?:information|contents?) (?:of|contained|in))/i,
   signals: [
     /\bconfidential(?:ity)?\b/i,
     /intended (?:recipient|solely)/i,

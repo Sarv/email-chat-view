@@ -94,9 +94,7 @@ export function isElement(node: Node | null | undefined): node is Element {
 
 /** Normalized text of a node — whitespace collapsed, nbsp folded, trimmed. */
 export function normalizedText(node: { textContent?: string | null } | null | undefined): string {
-  return foldNbsp(node?.textContent)
-    .replace(/\s+/g, ' ')
-    .trim();
+  return foldNbsp(node?.textContent).replace(/\s+/g, ' ').trim();
 }
 
 /**
