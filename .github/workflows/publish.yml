@@ -81,7 +81,12 @@ jobs:
       # version cannot be un-published after 72 hours, and cannot be re-published
       # at the same number ever — so this gate runs on the tag, not on trust.
       - run: pnpm type-check
-      - run: pnpm test
+      # Coverage, matching ci.yml: the 100% thresholds in vitest.config.ts only
+      # fail the build when the coverage reporter runs, so a plain `pnpm test`
+      # here would make the RELEASE gate weaker than the merge gate — the one
+      # place that must never be true, since a published version cannot be
+      # unpublished after 72 hours.
+      - run: pnpm test:coverage
       - run: pnpm build
 
       # No NODE_AUTH_TOKEN, on purpose. This repo is a TRUSTED PUBLISHER on npm
