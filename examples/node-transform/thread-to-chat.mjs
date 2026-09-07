@@ -8,7 +8,7 @@
  * The import below points at the local build so this file runs straight from a
  * clone. IN YOUR APP it is the package specifier:
  *
- *     import { mailsToMessages } from 'email-chat-view/transform';
+ *     import { mailsToMessages } from '@sarv-in/email-chat-view/transform';
  */
 import { parseHTML } from 'linkedom';
 

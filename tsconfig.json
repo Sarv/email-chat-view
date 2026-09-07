@@ -23,8 +23,8 @@
     // specifier back to the source so `tsc` can resolve it in-repo, without the
     // examples having to import `../../src` and stop being copy-pasteable.
     "paths": {
-      "email-chat-view": ["./src/index.ts"],
-      "email-chat-view/transform": ["./src/transform.ts"]
+      "@sarv-in/email-chat-view": ["./src/index.ts"],
+      "@sarv-in/email-chat-view/transform": ["./src/transform.ts"]
     }
   },
   // `examples` is here so CI type-checks them: an example that no longer

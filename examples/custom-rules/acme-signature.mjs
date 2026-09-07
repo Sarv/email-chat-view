@@ -9,7 +9,7 @@
  *
  *     pnpm build && node examples/custom-rules/acme-signature.mjs
  *
- * In your app the import is `email-chat-view/transform`.
+ * In your app the import is `@sarv-in/email-chat-view/transform`.
  */
 import { parseHTML } from 'linkedom';
 

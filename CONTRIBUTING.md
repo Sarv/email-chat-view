@@ -6,7 +6,7 @@ produced" rather than "it looks right" — but the surface you have to touch to
 contribute is deliberately tiny. Most contributions are **one plain object and
 one test case**, and never open the engine at all.
 
-- **npm:** <https://www.npmjs.com/package/email-chat-view>
+- **npm:** <https://www.npmjs.com/package/@sarv-in/email-chat-view>
 - **Source:** <https://github.com/Sarv/email-chat-view>
 - **Issues:** <https://github.com/Sarv/email-chat-view/issues>
 
@@ -108,7 +108,7 @@ If your change alters the public surface, update the example that uses it — an
 example that no longer compiles is worse than no example, because it is the
 first thing people copy. **`pnpm type-check` covers `examples/` too**, so a
 change that breaks the React example fails CI rather than being found by the
-next person who copies it. The example imports `email-chat-view` by its
+next person who copies it. The example imports `@sarv-in/email-chat-view` by its
 published specifier, mapped back to `src/` by `paths` in `tsconfig.json`, so
 what is checked is exactly what a consumer would paste.
 
@@ -144,7 +144,7 @@ already decided, so the order below is not incidental — it is the design.
     |                 contentKey() collapses the copies; reals always win;
     |                 dateless quotes get an approximate date.
     v
-  ChatMessage[]  <-- what `email-chat-view/transform` returns. No React, no DOM
+  ChatMessage[]  <-- what `@sarv-in/email-chat-view/transform` returns. No React, no DOM
     |             assumed, safe in Node.
     |  [4] GROUP     ui/grouping.ts, ui/sender-colors.ts, ui/dates.ts
     |  [5] RENDER    ui/body-shape.ts -> ui/sanitize.ts -> inline or ui/frame.ts
@@ -240,7 +240,7 @@ apart is what stops that mistake from being one careless import away.
 | File | What it is for |
 | --- | --- |
 | `src/index.ts` | package root. Re-exports transform + view, nothing else |
-| `src/transform.ts` | the `email-chat-view/transform` entry — everything reachable from here is React-free and DOM-injectable, which is what makes a Node pipeline possible |
+| `src/transform.ts` | the `@sarv-in/email-chat-view/transform` entry — everything reachable from here is React-free and DOM-injectable, which is what makes a Node pipeline possible |
 | `src/view.ts` | the React entry. Components plus the pure UI helpers, exported individually so a host with its own list can use the parts |
 | `src/types.ts` | the public data contract: `Mail` (what a mail store gives you) and `ChatMessage` (one bubble's worth of resolved content). The gap between those two shapes is what the transform closes |
 | `src/dom.ts` | `resolveParser`, `hasGlobalDomParser`, `NoDomParserError`. The parser is injected rather than assumed so the same code runs in a browser, in Node and in the suite |

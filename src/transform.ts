@@ -1,5 +1,5 @@
 /**
- * `email-chat-view/transform` — the transform layer, with no React.
+ * `@sarv-in/email-chat-view/transform` — the transform layer, with no React.
  *
  * A separate entry point on purpose. Everything reachable from here is pure
  * TypeScript over strings and DOM nodes, so it imports and runs in places React
@@ -10,7 +10,7 @@
  * @example Node, with an injected parser
  * ```ts
  * import { parseHTML } from 'linkedom';
- * import { mailsToMessages } from 'email-chat-view/transform';
+ * import { mailsToMessages } from '@sarv-in/email-chat-view/transform';
  *
  * const messages = mailsToMessages(mails, {
  *   parser: (html) => parseHTML(html).document,

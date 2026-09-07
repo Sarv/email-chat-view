@@ -11,7 +11,7 @@
  * and which the README recommends for Node) has no `setEnd` at all, and
  * `cloneContents` throws `start.cloneNode is not a function` after a
  * `setEndBefore`. Depending on `Range` would mean the splitter silently only
- * worked in a browser, which is the opposite of what `email-chat-view/transform`
+ * worked in a browser, which is the opposite of what `@sarv-in/email-chat-view/transform`
  * promises.
  *
  * So the slice is done by subtraction instead: deep-clone the whole root, then

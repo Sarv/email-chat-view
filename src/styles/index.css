@@ -127,7 +127,7 @@
  *
  * One stylesheet for the whole package:
  *
- *     import 'email-chat-view/style.css';
+ *     import '@sarv-in/email-chat-view/style.css';
  *
  * Rules to note before editing:
  *

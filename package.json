@@ -1,5 +1,5 @@
 {
-  "name": "email-chat-view",
+  "name": "@sarv-in/email-chat-view",
   "version": "0.1.0",
   "description": "Turn an email thread into a chat-style conversation view. Provider-rule-driven quote/signature/disclaimer stripping plus a React chat UI.",
   "license": "MIT",
@@ -48,6 +48,9 @@
   "types": "./dist/index.d.ts",
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "packageManager": "pnpm@8.15.0",
   "scripts": {

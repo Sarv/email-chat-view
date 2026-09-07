@@ -2,7 +2,7 @@
  * The React view layer.
  *
  * Everything reachable from here needs React, and — unlike
- * `email-chat-view/transform` — a DOM: the sanitizer, the frame and the
+ * `@sarv-in/email-chat-view/transform` — a DOM: the sanitizer, the frame and the
  * observers are all browser work. Keeping the two apart is what lets a Node
  * pipeline import the transform without pulling in React, DOMPurify or an
  * address grammar.

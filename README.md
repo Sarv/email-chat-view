@@ -1,14 +1,14 @@
 # email-chat-view
 
-[![npm version](https://img.shields.io/npm/v/email-chat-view.svg)](https://www.npmjs.com/package/email-chat-view)
-[![npm downloads](https://img.shields.io/npm/dm/email-chat-view.svg)](https://www.npmjs.com/package/email-chat-view)
+[![npm version](https://img.shields.io/npm/v/@sarv-in/email-chat-view.svg)](https://www.npmjs.com/package/@sarv-in/email-chat-view)
+[![npm downloads](https://img.shields.io/npm/dm/@sarv-in/email-chat-view.svg)](https://www.npmjs.com/package/@sarv-in/email-chat-view)
 [![CI](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml/badge.svg)](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml)
 [![coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/Sarv/email-chat-view/actions/workflows/ci.yml)
-[![license](https://img.shields.io/npm/l/email-chat-view.svg)](./LICENSE)
+[![license](https://img.shields.io/npm/l/@sarv-in/email-chat-view.svg)](./LICENSE)
 
 Turn an email thread into a chat-style conversation.
 
-**npm:** [`email-chat-view`](https://www.npmjs.com/package/email-chat-view) ·
+**npm:** [`@sarv-in/email-chat-view`](https://www.npmjs.com/package/@sarv-in/email-chat-view) ·
 **source:** [Sarv/email-chat-view](https://github.com/Sarv/email-chat-view) ·
 **examples:** [runnable examples](./examples) ·
 **issues:** [report one](https://github.com/Sarv/email-chat-view/issues) ·
@@ -76,9 +76,9 @@ for the things that go wrong on a first integration. This page is the reference.
 ## Install
 
 ```sh
-npm install email-chat-view
+npm install @sarv-in/email-chat-view
 # or
-pnpm add email-chat-view
+pnpm add @sarv-in/email-chat-view
 ```
 
 From a local checkout — a fork you are working on, or a patched build:
@@ -88,21 +88,21 @@ pnpm add file:../email-chat-view
 ```
 
 React and react-dom are **optional** peers, needed only for the view. Nothing
-under `email-chat-view/transform` imports them.
+under `@sarv-in/email-chat-view/transform` imports them.
 
 ### Entry points
 
 | Import | Contains | Needs React |
 | --- | --- | --- |
-| `email-chat-view` | everything, view included | yes |
-| `email-chat-view/transform` | the mail → message transform, rules, classification | no |
-| `email-chat-view/style.css` | the compiled stylesheet | — |
+| `@sarv-in/email-chat-view` | everything, view included | yes |
+| `@sarv-in/email-chat-view/transform` | the mail → message transform, rules, classification | no |
+| `@sarv-in/email-chat-view/style.css` | the compiled stylesheet | — |
 
 Both ESM and CJS ship, with matching type declarations for each:
 
 ```js
-import { mailsToMessages } from 'email-chat-view/transform';   // ESM
-const { mailsToMessages } = require('email-chat-view/transform'); // CJS
+import { mailsToMessages } from '@sarv-in/email-chat-view/transform';   // ESM
+const { mailsToMessages } = require('@sarv-in/email-chat-view/transform'); // CJS
 ```
 
 > **Status.** Published on npm and complete end to end: the transform layer,
@@ -118,7 +118,7 @@ const { mailsToMessages } = require('email-chat-view/transform'); // CJS
 ### Just the data
 
 ```ts
-import { mailsToMessages } from 'email-chat-view/transform';
+import { mailsToMessages } from '@sarv-in/email-chat-view/transform';
 
 const messages = mailsToMessages(mails, {
   currentUserAddress: 'me@example.com',
@@ -147,7 +147,7 @@ is the quoted text inside a mail somebody else sent — render one bubble per ma
 and the conversation has holes in it.
 
 ```ts
-import { threadToMessages } from 'email-chat-view/transform';
+import { threadToMessages } from '@sarv-in/email-chat-view/transform';
 
 const messages = threadToMessages(mails, {
   currentUserAddress: 'me@example.com',
@@ -180,8 +180,8 @@ id of `<mailId>#<segmentIndex>`, stable as the thread grows.
 ### The view
 
 ```tsx
-import { MailChatView } from 'email-chat-view';
-import 'email-chat-view/style.css';
+import { MailChatView } from '@sarv-in/email-chat-view';
+import '@sarv-in/email-chat-view/style.css';
 
 <MailChatView messages={messages} />;
 ```
@@ -206,7 +206,7 @@ The `mails` above is a `Mail[]` — a plain object, with **three required fields
 and a body:
 
 ```ts
-import type { Mail } from 'email-chat-view/transform';
+import type { Mail } from '@sarv-in/email-chat-view/transform';
 
 const mail: Mail = {
   id: '1',                            // unique within the thread
@@ -252,8 +252,8 @@ identity colours, the inline-vs-frame decision, sanitisation, the sandboxed
 frame, attachment chips, pending and failed states.
 
 ```tsx
-import { MailChatView, type ChatMessage } from 'email-chat-view';
-import 'email-chat-view/style.css';
+import { MailChatView, type ChatMessage } from '@sarv-in/email-chat-view';
+import '@sarv-in/email-chat-view/style.css';
 
 // Whatever produced these — a model, your own parser, a server endpoint.
 const messages: ChatMessage[] = turns.map((turn) => ({
@@ -393,7 +393,7 @@ builder — pass one in:
 
 ```ts
 import { parseHTML } from 'linkedom';
-import { mailsToMessages } from 'email-chat-view/transform';
+import { mailsToMessages } from '@sarv-in/email-chat-view/transform';
 
 const parser = (html) => parseHTML(`<html><body>${html}</body></html>`).document;
 
@@ -473,7 +473,7 @@ one at a time and fill themselves in.
 ### Re-running the transform is cheap, if you pass a cache
 
 ```ts
-import { createBodyCache, mailsToMessages } from 'email-chat-view/transform';
+import { createBodyCache, mailsToMessages } from '@sarv-in/email-chat-view/transform';
 
 const cache = createBodyCache(); // once, outside render. Default capacity 500.
 
@@ -596,7 +596,7 @@ If a rule is too aggressive for your corpus, drop it — every family is
 independently replaceable, and a rule is a plain object:
 
 ```ts
-import { cleanReplyBody, quoteRules, bareBlockquote } from 'email-chat-view/transform';
+import { cleanReplyBody, quoteRules, bareBlockquote } from '@sarv-in/email-chat-view/transform';
 
 cleanReplyBody(html, {
   // A corpus full of genuine pull-quotes? Lose the loosest rule, keep the rest.
@@ -664,7 +664,7 @@ receive mail from ([CONTRIBUTING.md](./CONTRIBUTING.md) walks through that).
 Say your client wraps signatures in `<div class="acme-sig">`:
 
 ```ts
-import type { DomRule } from 'email-chat-view/transform';
+import type { DomRule } from '@sarv-in/email-chat-view/transform';
 
 export const acmeSignature: DomRule = {
   name: 'acme',                    // appears in `applied` as 'signature:acme'
@@ -759,7 +759,7 @@ A newsletter is not a conversation, and rendering one as a chat bubble reads as
 nonsense. `classifyMail` says which one you have:
 
 ```ts
-import { classifyMail, isConversational } from 'email-chat-view/transform';
+import { classifyMail, isConversational } from '@sarv-in/email-chat-view/transform';
 
 classifyMail({
   body,
@@ -789,7 +789,7 @@ tunable rather than mysterious.
 ## API
 
 Everything below except [the view](#view) is exported from
-`email-chat-view/transform` and, for convenience, from the package root. The
+`@sarv-in/email-chat-view/transform` and, for convenience, from the package root. The
 view is root-only: importing it pulls in React.
 
 ### Transform
@@ -952,7 +952,7 @@ view around it.
 ```text
 src/
   index.ts          package root — re-exports transform + view
-  transform.ts      'email-chat-view/transform' entry — no React, no DOM assumed
+  transform.ts      '@sarv-in/email-chat-view/transform' entry — no React, no DOM assumed
   view.ts           React entry — components and the pure UI helpers
   types.ts          the public data contract: Mail, ChatMessage, Attachment
   dom.ts            injectable HTML parser (resolveParser, NoDomParserError)

@@ -22,8 +22,8 @@ import {
   type Attachment,
   type Mail,
   type VisibleRange,
-} from 'email-chat-view';
-import 'email-chat-view/style.css';
+} from '@sarv-in/email-chat-view';
+import '@sarv-in/email-chat-view/style.css';
 
 export interface MailThreadProps {
   /** Whatever your mail store gives you, in any order. */

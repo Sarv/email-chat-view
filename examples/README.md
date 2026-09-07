@@ -18,9 +18,9 @@ The two runnable files import from `../../dist` so they work straight from a
 checkout. **In your own app the import is the package specifier:**
 
 ```js
-import { mailsToMessages } from 'email-chat-view/transform';   // no React
-import { MailChatView } from 'email-chat-view';                // the view
-import 'email-chat-view/style.css';
+import { mailsToMessages } from '@sarv-in/email-chat-view/transform';   // no React
+import { MailChatView } from '@sarv-in/email-chat-view';                // the view
+import '@sarv-in/email-chat-view/style.css';
 ```
 
 Expected output from `node-transform`, abbreviated — note the `applied` line,
@@ -47,7 +47,7 @@ one is a bug somebody has already shipped. Keep sample addresses on
 `example`/`acme.example` and never commit a real message.
 
 A TypeScript example is type-checked with the rest of the repo — `pnpm
-type-check` includes `examples/`, and `email-chat-view` resolves back to `src/`
+type-check` includes `examples/`, and `@sarv-in/email-chat-view` resolves back to `src/`
 through `paths`, so the file can import the package by its real specifier and
 still be verified. A `.mjs` example is not checked (it imports the built
 `dist/`), so run it after `pnpm build` before you push.
