@@ -20,6 +20,7 @@
  *       rewriting exercise over `src` attributes.
  */
 
+import { documentSurfaceCss } from './surfaces.js';
 import { WIDE_TABLE_CSS } from './wide-tables.js';
 
 /** Colours and type for the frame, sourced from the host's own tokens. */
@@ -37,6 +38,12 @@ export interface FrameTheme {
    * channel — an opaque value here erases the sender's colour entirely.
    */
   wash: string;
+  /**
+   * Opaque surface a ruled data table is given to sit on, so its rows read as
+   * a sheet of paper on the sender-coloured page instead of dissolving into
+   * it. Unlike {@link FrameTheme.wash} this one is MEANT to be opaque.
+   */
+  sheet: string;
 }
 
 /**
@@ -62,6 +69,9 @@ export const FALLBACK_FRAME_THEME: FrameTheme = {
   // file knowing which is in force, and without a literal that would duplicate
   // a colour `styles/index.css` already owns.
   wash: 'color-mix(in srgb, Canvas 62%, transparent)',
+  // The platform's own page, unmixed: a data table is drawn as paper, and
+  // paper is what the reader's theme says a page looks like.
+  sheet: 'Canvas',
 };
 
 /** The `--sec-*` token backing each theme slot. */
@@ -74,6 +84,7 @@ const THEME_TOKENS: Record<keyof FrameTheme, string> = {
   fontSize: '--sec-fs-body',
   lineHeight: '--sec-lh-body',
   wash: '--sec-frame-wash',
+  sheet: '--sec-frame-sheet',
 };
 
 /**
@@ -172,6 +183,11 @@ export function buildFrameCss(theme: FrameTheme): string {
     `${WASHED_CELLS.split(',')
       .map((selector) => `${selector} *`)
       .join(',')}{color:${theme.ink}!important;}`,
+    // What the sender's EDITOR assumed about the page, versus what the sender
+    // actually designed — told apart by measurement in `fitDocumentSurfaces`,
+    // which the host calls from the same pass as `fitWideTables`, and which
+    // these two rules are the styling half of.
+    documentSurfaceCss(theme.sheet),
     `blockquote{margin:0 0 0 .5em;padding-left:.75em;border-left:2px solid ${theme.border};color:${theme.muted};}`,
     'p{margin:0 0 .5em;}',
     'p:last-child{margin-bottom:0;}',

@@ -10,6 +10,7 @@ import { FakeResizeObserver, installResizeObserver } from '../helpers/observers.
 interface FakeFrameDoc {
   body: { scrollHeight: number; getBoundingClientRect: () => { top: number } } | null;
   documentElement: { scrollHeight: number };
+  querySelectorAll: (selector: string) => Element[];
   createRange: () => unknown;
   addEventListener: (type: string, listener: (event: unknown) => void) => void;
   removeEventListener: ReturnType<typeof vi.fn>;
@@ -33,6 +34,12 @@ function fakeFrameDoc(height = 250, body: 'present' | 'missing' = 'present'): Fa
         ? null
         : { scrollHeight: height, getBoundingClientRect: () => ({ top: 0 }) },
     documentElement: { scrollHeight: height },
+    // The measurement pass also decides which of the message's own surfaces
+    // are the editor's white page and which are the sender's design. There is
+    // no message here to decide anything about — but a document that cannot be
+    // queried at all is not a document, and pretending otherwise would let a
+    // real crash in that pass pass this suite.
+    querySelectorAll: () => [],
     createRange: () => ({
       selectNodeContents: () => undefined,
       getBoundingClientRect: () => ({ bottom: height }),

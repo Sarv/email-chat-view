@@ -93,6 +93,7 @@ describe('readFrameTheme', () => {
         '--sec-fs-body': '13px',
         '--sec-lh-body': '1.5',
         '--sec-frame-wash': 'rgba(255, 255, 255, 0.62)',
+        '--sec-frame-sheet': '#ffffff',
       }),
     );
     expect(theme).toEqual({
@@ -104,6 +105,7 @@ describe('readFrameTheme', () => {
       fontSize: '13px',
       lineHeight: '1.5',
       wash: 'rgba(255, 255, 255, 0.62)',
+      sheet: '#ffffff',
     });
   });
 
@@ -127,6 +129,7 @@ describe('buildFrameCss', () => {
     fontSize: '13px',
     lineHeight: '1.5',
     wash: 'rgba(255, 255, 255, 0.62)',
+    sheet: '#ffffff',
   };
 
   it('writes every slot of the theme into the stylesheet', () => {
@@ -134,27 +137,39 @@ describe('buildFrameCss', () => {
     for (const value of Object.values(theme)) expect(css).toContain(value);
   });
 
-  // CHANGED BEHAVIOUR (was: 'never uses !important', then the cell wash alone).
-  // Both exceptions exist for the same reason: what they override is an INLINE
-  // style on the sender's own element — `style="background-color:…"` on a cell,
-  // `style="width:578pt"` on a table and `white-space:nowrap` on its cells —
-  // which a normal author declaration cannot outrank. Both are also opt-in:
-  // the wash only reaches a cell that declares a colour, and the reflow only a
-  // table `fitWideTables` has measured and found too wide.
+  // CHANGED BEHAVIOUR (was: 'never uses !important', then the cell wash alone,
+  // then the wash and the wide-table reflow). All THREE exceptions exist for
+  // the same reason: what they override is an INLINE style on the sender's own
+  // element — `style="background-color:…"` on a cell, `style="width:578pt"` on
+  // a table and `white-space:nowrap` on its cells, `style="background:white"`
+  // on a paragraph — which a normal author declaration cannot outrank. All
+  // three are also opt-in: the wash only reaches a cell that declares a colour,
+  // the reflow only a table `fitWideTables` has measured and found too wide,
+  // and the paper rule only an element `fitDocumentSurfaces` has measured and
+  // found to be the editor's white page rather than the sender's design.
+  //
+  // Note what is NOT here: the table sheet carries no `!important`. It is a
+  // page put UNDER the sender's design, so every background of theirs has to
+  // keep winning over it — and the row rule additionally excludes a row that
+  // declared one, because `bgcolor` is a presentational hint and would lose to
+  // the sheet even without `!important`.
   //
   // Regression: everything else is a DEFAULT the sender's own CSS must be able
   // to override. One more `!important` and a designed newsletter renders in the
   // app's font instead of its own — the frame stops being a faithful rendering
   // of the mail and becomes an opinion about it.
-  it('keeps !important to the cell wash and the wide-table reflow', () => {
+  it('keeps !important to the cell wash, the wide-table reflow and the editor paper', () => {
     const css = buildFrameCss(theme);
     // Every rule whose selector list starts at a washed cell — the background
     // on the cell itself, and the ink carried into its children.
     const withoutWash = css.replace(/td\[bgcolor\][^}]*\{[^}]*\}/g, '');
     // ...and the reflow rules, which are the whole of WIDE_TABLE_CSS.
-    const bare = withoutWash.split(WIDE_TABLE_CSS).join('');
+    const withoutReflow = withoutWash.split(WIDE_TABLE_CSS).join('');
+    // ...and the one rule that blanks a background the sender's EDITOR chose.
+    const bare = withoutReflow.replace(/\.sec-paper\{[^}]*\}/g, '');
     expect(bare).not.toContain('!important');
-    expect(bare).not.toBe(withoutWash);
+    expect(bare).not.toBe(withoutReflow);
+    expect(withoutReflow).not.toBe(withoutWash);
     expect(withoutWash).not.toBe(css);
   });
 

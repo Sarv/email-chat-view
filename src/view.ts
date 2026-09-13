@@ -116,3 +116,13 @@ export {
   TABLE_SCROLL_CLASS,
   WIDE_TABLE_CSS,
 } from './ui/wide-tables.js';
+
+// Same reason: the standard reading pane prints the same mail on the same
+// sender-coloured page and has to tell the editor's white from the sender's.
+export {
+  documentSurfaceCss,
+  fitDocumentSurfaces,
+  isEditorWhite,
+  PAPER_CLASS,
+  TABLE_SHEET_CLASS,
+} from './ui/surfaces.js';

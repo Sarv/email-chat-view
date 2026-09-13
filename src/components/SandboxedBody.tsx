@@ -28,6 +28,7 @@ import {
 } from '../ui/frame.js';
 import type { ViewLabels } from '../ui/labels.js';
 import { sanitizeFrameHtml } from '../ui/sanitize.js';
+import { fitDocumentSurfaces } from '../ui/surfaces.js';
 import { fitWideTables } from '../ui/wide-tables.js';
 
 import { ImageOffIcon } from './icons.js';
@@ -101,6 +102,9 @@ export function SandboxedBody({
       // makes it taller, so measuring first would size the frame to the
       // unwrapped layout and clip the rows the reflow added.
       fitWideTables(frame.contentDocument);
+      // Also before the height: dropping the editor's white paper collapses the
+      // margins it was holding open, which changes the height too.
+      fitDocumentSurfaces(frame.contentDocument);
       const next = measureFrameHeight(frame.contentDocument);
       if (next <= 0) return;
       setHeight(next);

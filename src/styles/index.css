@@ -54,7 +54,11 @@
      block fighting the bubble's identity tint. Follows `--sec-surface`, so a
      host with its own dark theme washes dark without setting this. */
   --sec-frame-wash: color-mix(in srgb, var(--sec-surface) 62%, transparent);
-  --sec-bubble-theirs-bg: var(--sec-surface);
+  /* Opaque sheet a ruled data table inside the frame is given to sit on. Mail
+     is written for a white page; on the sender's colour a table whose rows have
+     gone that colour too stops reading as a table, so the paper is put back
+     under it — only under the grid, never under the prose around it. */
+  --sec-frame-sheet: var(--sec-surface);
   --sec-bubble-theirs-ink: var(--sec-ink);
   --sec-bubble-radius: var(--r-lg, 12px);
   --sec-bubble-max-width: 78%;
