@@ -8,7 +8,7 @@ import { settleFrameLoad } from '../helpers/frames.js';
 import { chatMessage, NOW } from '../helpers/messages.js';
 
 /** Plain `rgb()` so jsdom's CSSOM hands the same string back. */
-const COLOR = { avatar: 'rgb(1, 2, 3)', bubble: 'rgb(4, 5, 6)' };
+const COLOR = { avatar: 'rgb(1, 2, 3)', bubble: 'rgb(4, 5, 6)', edge: 'rgb(7, 8, 9)', page: 'rgb(10, 11, 12)' };
 
 /** `en-GB` and an injected "now", so no assertion depends on the test clock. */
 const FIXED = { locale: 'en-GB', now: NOW } as const;
@@ -29,6 +29,7 @@ describe('ChatBubble', () => {
     const bubble = container.querySelector('.sec-bubble') as HTMLElement;
     expect(bubble.className).toBe('sec-bubble sec-bubble--theirs sec-bubble--tail');
     expect(bubble.style.backgroundColor).toBe(COLOR.bubble);
+    expect(bubble.style.borderColor).toBe(COLOR.edge);
     expect(container.querySelector('.sec-head__sender')?.textContent).toBe('Alice Chen');
     // A glance, not a manifest: the full list is in the hover tooltip.
     expect(container.querySelector('.sec-head__to')?.textContent).toBe('→ bob');
@@ -152,12 +153,19 @@ describe('ChatBubble', () => {
     expect(rich.container.querySelector('.sec-bubble')?.className).toContain('sec-bubble--wide');
   });
 
-  // Regression: a designed mail is rendered verbatim, so it arrives with its
-  // own background. Paint the sender tint behind it and pad it like a chat
-  // line and the reader sees a card inside a card — which is what a heavy HTML
-  // mail looked like. The tint has to be dropped and `--doc` has to be on, or
-  // the stylesheet has nothing to hang the padding removal off.
-  it('drops the sender tint and the bubble padding for a designed mail', () => {
+  // CHANGED BEHAVIOUR (was: 'drops the sender tint ... for a designed mail').
+  // The tint used to be dropped here on the grounds that a designed mail brings
+  // its own background, so tinting it would read as a card inside a card. In
+  // practice most mail leaves large areas transparent, so what the reader got
+  // was an untinted white card in a column of coloured ones — the one message
+  // type whose sender you could not identify at a glance. The tint now stays;
+  // where the mail does paint its own background it simply covers it, and the
+  // colours it paints into table cells are softened inside the frame
+  // (`buildFrameCss`) so they read as pastels rather than competing with it.
+  //
+  // Regression: the padding removal still hangs off `--doc`, so that class must
+  // stay on or a framed body gets a chat line's padding around it.
+  it('carries the sender tint and loses the bubble padding for a designed mail', () => {
     const { container } = render(
       <ChatBubble
         message={chatMessage({ body: '<table><tr><td>Approve</td></tr></table>' })}
@@ -168,11 +176,40 @@ describe('ChatBubble', () => {
     );
     const bubble = container.querySelector('.sec-bubble') as HTMLElement;
     expect(bubble.className).toContain('sec-bubble--doc');
-    expect(bubble.style.backgroundColor).toBe('');
-    // The identity colour is not lost, it moves to where it can be seen.
+    expect(bubble.style.backgroundColor).toBe(COLOR.bubble);
+    // Regression: the wash alone is not enough here and the fix is incomplete
+    // without this. A designed mail is rendered verbatim and paints its own
+    // surface edge to edge over the tint, so the border is the only part of
+    // the bubble the sender's colour still reaches — drop it and the reader is
+    // back to a white card in a column of coloured ones.
+    expect(bubble.style.borderColor).toBe(COLOR.edge);
+    // Regression: the frame's page is painted by `SandboxedBody`, several
+    // components down, so the colour reaches it as an inherited custom property
+    // rather than a prop. Drop it and the page falls back to the app surface —
+    // a white slab inside the sender's mat, which is what this replaced.
+    expect(bubble.style.getPropertyValue('--sec-doc-page')).toBe(COLOR.page);
+    // The avatar keeps carrying the same colour, so bubble and avatar agree.
     expect((container.querySelector('.sec-avatar') as HTMLElement).style.backgroundColor).toBe(
       COLOR.avatar,
     );
+  });
+
+  // Regression: the reader's OWN designed mail has no per-sender colour object
+  // (`isMine` suppresses it), so an inline tint here would be `undefined` and
+  // the bubble would fall through to whatever `--doc` sets. It must stay
+  // uninlined so the stylesheet's own `--mine` document rule can colour it.
+  it('leaves a designed mail of my own to the stylesheet', () => {
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage({ body: '<table><tr><td>Approve</td></tr></table>', isFromMe: true })}
+        labels={DEFAULT_LABELS}
+        {...FIXED}
+      />,
+    );
+    const bubble = container.querySelector('.sec-bubble') as HTMLElement;
+    expect(bubble.className).toContain('sec-bubble--doc');
+    expect(bubble.className).toContain('sec-bubble--mine');
+    expect(bubble.style.backgroundColor).toBe('');
   });
 
   // Regression: `--doc` is the framed-body marker, so an inline reply must

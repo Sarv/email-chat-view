@@ -18,6 +18,28 @@ export interface SenderColor {
   avatar: string;
   /** Faint wash behind the bubble, same hue. */
   bubble: string;
+  /**
+   * `bubble`, flattened against the app's surface so it is OPAQUE.
+   *
+   * A designed mail is rendered in a frame whose own page is transparent, so a
+   * translucent tint behind it comes up THROUGH the message — the sender's
+   * colour appears behind some paragraphs and not others, depending on what the
+   * mail happens to paint. The document needs one solid page, and this is it:
+   * the same colour as the bubble by construction, so the mail reads as being
+   * printed on the sender's colour rather than as a white slab inside it.
+   */
+  page: string;
+  /**
+   * The bubble's rim, same hue, strong enough to read on its own.
+   *
+   * A chat line shows its sender's colour as the fill behind the text, so a
+   * faint wash is plenty. A DESIGNED mail does not: it is rendered verbatim
+   * edge to edge and paints its own surface over the wash, so the only part of
+   * the bubble the sender's colour can still reach is its border — which at
+   * `bubble`'s alpha is invisible. This is that border, and it is what makes a
+   * document identifiable at a glance in a column of them.
+   */
+  edge: string;
 }
 
 /** Fallback identity for a message with no usable sender address. */
@@ -47,12 +69,32 @@ export function senderHue(address: string): number {
   return hash % 360;
 }
 
-/** Avatar fill plus the matching faint bubble wash for a hue. */
+/**
+ * How much of the hue the bubble carries.
+ *
+ * Shared by `bubble` and `page` so the translucent tint and the opaque page can
+ * never drift: `color-mix(A p%, B)` is exactly `A` at alpha `p` composited over
+ * `B`, so at one alpha the two are the same colour by construction rather than
+ * by two numbers someone has to remember to keep in step.
+ */
+const TINT_ALPHA = 0.12;
+
+/** Avatar fill, the matching faint bubble wash, its opaque twin, and the rim. */
 export function colorForHue(hue: number): SenderColor {
   const normalized = (((hue % 360) + 360) % 360).toFixed(1);
+  const tint = `hsl(${normalized} 60% 50%)`;
   return {
     avatar: `hsl(${normalized} 58% 43%)`,
-    bubble: `hsl(${normalized} 60% 50% / 0.12)`,
+    bubble: `hsl(${normalized} 60% 50% / ${TINT_ALPHA})`,
+    // `var(--sec-surface)` rather than a literal: the page has to follow the
+    // reader's theme, so the same hue flattens against white in light mode and
+    // against the dark surface in dark mode. Resolved by the host stylesheet,
+    // which is the only context this string is ever used in.
+    page: `color-mix(in srgb, ${tint} ${TINT_ALPHA * 100}%, var(--sec-surface))`,
+    // Held back from the avatar's full strength: a rim this colour outlines
+    // every bubble in the thread, and at the avatar's saturation a column of
+    // them reads as a set of warning boxes rather than a conversation.
+    edge: `hsl(${normalized} 55% 48% / 0.5)`,
   };
 }
 

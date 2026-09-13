@@ -49,6 +49,11 @@
      tints instead of filling wants the edge back, and this is where it asks. */
   --sec-bubble-mine-border: transparent;
   --sec-bubble-mine-link: inherit;
+  /* Translucent wash the sandboxed frame composites OVER a cell colour the
+     sender chose, so their hue survives as a pastel instead of a saturated
+     block fighting the bubble's identity tint. Follows `--sec-surface`, so a
+     host with its own dark theme washes dark without setting this. */
+  --sec-frame-wash: color-mix(in srgb, var(--sec-surface) 62%, transparent);
   --sec-bubble-theirs-bg: var(--sec-surface);
   --sec-bubble-theirs-ink: var(--sec-ink);
   --sec-bubble-radius: var(--r-lg, 12px);
@@ -395,21 +400,47 @@
  * an edge, a radius, and the clipping that makes the radius mean something.
  */
 .sec-bubble--doc {
-  padding: 0;
-  /* Beats the inline sender tint only because the tint is skipped for a
-     document in `ChatBubble`; this covers `--mine`, which is a class. */
+  /* A mat, not a bubble's padding. The document keeps its own margins — this is
+     the strip of the sender's colour AROUND it, which is what makes a designed
+     mail identifiable at a glance and stops its content sitting flush against
+     the spine. */
+  padding: var(--sec-gap);
+  /* The mat's colour when nothing tints it. `ChatBubble` sets the sender's own
+     tint INLINE, which outranks this. */
   background: var(--sec-surface);
+  /* Cell colours inside the frame are softened against the PAGE, not against
+     the app's surface. A page in the sender's colour with white table cells
+     sitting on it is the patchwork the page was meant to end — this is what
+     pulls those cells into the same family, while a cell the sender actually
+     coloured still shows its own hue through the 62%. */
+  --sec-frame-wash: color-mix(in srgb, var(--sec-doc-page, var(--sec-surface)) 62%, transparent);
   box-shadow: none;
   /* The document fills the card edge to edge, so the card has to clip it —
      otherwise its corners square off over the border radius. */
   overflow: hidden;
+  /* The sender's colour is inlined onto `border-color` for every bubble, but a
+     1px rim around a full-bleed document is not something a reader notices.
+     Widening the leading edge turns it into a spine that says whose mail this
+     is — the one part of a designed message the sender's own CSS cannot paint
+     over. Width only: the colour stays wherever `ChatBubble` put it. */
+  border-inline-start-width: 3px;
 }
 
 /* A document is its own surface, so the reader's own designed mail cannot
    inherit the brand-filled bubble's ink or its chip treatment. */
 .sec-bubble--doc.sec-bubble--mine {
+  /* The reader has no per-sender colour of their own — `isMine` suppresses it
+     — so their spine comes from the brand instead, and the rest of the rim
+     stays neutral. */
   border-color: var(--sec-border);
+  border-inline-start-color: var(--sec-brand);
   color: var(--sec-bubble-theirs-ink);
+  /* The reader's own colour, at the same faint strength the inline tint gives
+     everyone else — so a document from me is still recognisably mine without
+     the brand-filled bubble swallowing the mail's own design. `--sec-brand-soft`
+     is already opaque, so it serves as both the mat and the page. */
+  background: var(--sec-brand-soft);
+  --sec-doc-page: var(--sec-brand-soft);
 }
 
 .sec-bubble--doc.sec-bubble--mine .sec-chip {
@@ -424,13 +455,28 @@
   opacity: 1;
 }
 
-/* Padding came off the bubble, so the parts that are ours rather than the
-   sender's bring their own — and a rule to sit behind, so they read as the
-   frame around the document instead of part of it. */
+/* The page the document is printed on, and the reason the mat is only a mat:
+   the sender's tint is on the BUBBLE, and a mail leaves most of itself
+   transparent, so without an opaque surface here the tint came up behind the
+   sender's own body text — every unstyled paragraph and every table cell that
+   declared no colour sat on it, while the cells that declared white stayed
+   white. Opaque, and the tint is confined to the mat and the spine. */
+.sec-bubble--doc .sec-frame-host {
+  border-radius: var(--sec-radius-sm);
+  /* `ChatBubble` sets `--sec-doc-page` to the sender's tint made opaque, so the
+     page is the same colour as the mat around it and a designed mail reads as
+     being printed ON the sender's colour. The fallback is the plain surface,
+     which is what a message with no sender colour of its own gets. */
+  background: var(--sec-doc-page, var(--sec-surface));
+  /* The images banner is flush to the top of the page, so the page has to clip
+     it for the radius to mean anything. */
+  overflow: hidden;
+}
+
+/* The attachments are ours, not the sender's, so they sit ON the mat below the
+   page rather than being ruled off inside it. */
 .sec-bubble--doc .sec-attachments {
-  margin-block-start: 0;
-  padding: var(--sec-pad);
-  border-block-start: 1px solid var(--sec-border);
+  margin-block-start: var(--sec-gap);
 }
 
 .sec-bubble--doc .sec-note--images {

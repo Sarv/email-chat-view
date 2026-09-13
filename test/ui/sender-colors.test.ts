@@ -51,10 +51,46 @@ describe('senderHue', () => {
 });
 
 describe('colorForHue', () => {
-  it('produces an opaque avatar fill and a translucent bubble wash', () => {
+  // Regression: all four are the SAME hue, differing only in how loud they
+  // are. Let them drift apart and a bubble's rim stops matching the avatar
+  // beside it, which is the whole mechanism by which a reader learns a colour.
+  it('keeps the avatar, the wash, the page and the rim on one hue', () => {
+    const color = colorForHue(200);
+    for (const value of [color.avatar, color.bubble, color.page, color.edge]) {
+      expect(value).toContain('200.0');
+    }
+  });
+
+  // Regression: `page` is `bubble` made opaque, and the two must be the same
+  // colour to the eye. `color-mix(A p%, B)` IS `A` at alpha `p` over `B`, so
+  // the percentage here has to be the alpha there — if one is edited without
+  // the other, a designed mail's page stops matching the mat around it and the
+  // bubble reads as two different colours stacked.
+  it('makes the page the opaque twin of the bubble wash', () => {
+    const color = colorForHue(200);
+    expect(color.bubble).toContain('/ 0.12');
+    expect(color.page).toContain('12%');
+    // Flattened against the reader's surface token, not a literal, or the page
+    // stays white-ish in dark mode while the mat around it goes dark.
+    expect(color.page).toContain('var(--sec-surface)');
+  });
+
+  // Regression: the rim outlines EVERY bubble. At the avatar's saturation a
+  // column of them reads as a set of warning boxes, and at the wash's alpha it
+  // is invisible — which is the bug this exists to fix, on a designed mail
+  // whose own surface covers the wash and leaves the rim as the only signal.
+  it('keeps the rim between the wash and the avatar in strength', () => {
+    const color = colorForHue(200);
+    const alpha = (value: string) => Number(/\/ ([\d.]+)\)/.exec(value)?.[1] ?? 1);
+    expect(alpha(color.bubble)).toBeLessThan(alpha(color.edge));
+    expect(alpha(color.edge)).toBeLessThan(alpha(color.avatar));
+  });
+
+  it('produces an opaque avatar fill, a translucent bubble wash and a rim', () => {
     const color = colorForHue(200);
     expect(color.avatar).toBe('hsl(200.0 58% 43%)');
     expect(color.bubble).toBe('hsl(200.0 60% 50% / 0.12)');
+    expect(color.edge).toBe('hsl(200.0 55% 48% / 0.5)');
   });
 
   // Regression: the golden-angle rotation runs the hue past 360, and a negative

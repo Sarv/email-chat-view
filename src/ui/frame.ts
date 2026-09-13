@@ -20,6 +20,8 @@
  *       rewriting exercise over `src` attributes.
  */
 
+import { WIDE_TABLE_CSS } from './wide-tables.js';
+
 /** Colours and type for the frame, sourced from the host's own tokens. */
 export interface FrameTheme {
   ink: string;
@@ -29,6 +31,12 @@ export interface FrameTheme {
   font: string;
   fontSize: string;
   lineHeight: string;
+  /**
+   * Translucent overlay laid over a cell colour the SENDER chose, so their hue
+   * survives as a pastel instead of a saturated block. Must keep an alpha
+   * channel — an opaque value here erases the sender's colour entirely.
+   */
+  wash: string;
 }
 
 /**
@@ -49,6 +57,11 @@ export const FALLBACK_FRAME_THEME: FrameTheme = {
   font: 'system-ui, sans-serif',
   fontSize: 'medium',
   lineHeight: 'normal',
+  // `Canvas` is the platform's own page background — white in light mode, dark
+  // in dark mode — so one expression washes correctly in both without this
+  // file knowing which is in force, and without a literal that would duplicate
+  // a colour `styles/index.css` already owns.
+  wash: 'color-mix(in srgb, Canvas 62%, transparent)',
 };
 
 /** The `--sec-*` token backing each theme slot. */
@@ -60,6 +73,7 @@ const THEME_TOKENS: Record<keyof FrameTheme, string> = {
   font: '--sec-font',
   fontSize: '--sec-fs-body',
   lineHeight: '--sec-lh-body',
+  wash: '--sec-frame-wash',
 };
 
 /**
@@ -83,40 +97,81 @@ export function readFrameTheme(element: Element | null | undefined): FrameTheme 
   return theme;
 }
 
+/**
+ * Cells carrying a colour the SENDER chose — the ones whose background is
+ * softened, and whose text colour has to follow it.
+ *
+ * Deliberately narrow: a cell with no declared background is left completely
+ * alone, so an ordinary table is rendered exactly as the sender wrote it.
+ */
+const WASHED_CELLS = [
+  'td[bgcolor]',
+  'th[bgcolor]',
+  'td[style*="background"]',
+  'th[style*="background"]',
+  'tr[bgcolor]>td',
+  'tr[bgcolor]>th',
+].join(',');
+
 /** Base stylesheet injected into the frame, ahead of the message's own CSS. */
 export function buildFrameCss(theme: FrameTheme): string {
-  // Low specificity and no `!important` anywhere: these are DEFAULTS the
-  // sender's own CSS is meant to override. A designed newsletter that sets its
-  // own font must win, or the frame stops being a faithful rendering of the
-  // mail and starts being an opinion about it.
+  // Low specificity and, with TWO stated exceptions, no `!important`: these are
+  // DEFAULTS the sender's own CSS is meant to override. A designed
+  // newsletter that sets its own font must win, or the frame stops being a
+  // faithful rendering of the mail and starts being an opinion about it.
   return [
     'html,body{margin:0;padding:0;background:transparent;}',
     `body{color:${theme.ink};font-family:${theme.font};font-size:${theme.fontSize};`,
     `line-height:${theme.lineHeight};overflow-wrap:anywhere;}`,
     `a{color:${theme.link};}`,
     'img{max-width:100%;height:auto;}',
-    // A wide table scrolls WITHIN ITSELF rather than being cut off.
+    // A wide table is measured and fitted rather than cut off — see
+    // `fitWideTables`, which the host calls from its measurement pass, and which
+    // these rules are the styling half of.
     //
-    // `max-width:100%` alone cannot save a table whose cells carry fixed
-    // widths — a `<td width="300">` six times over has a min-content width of
-    // 1800px, and the table overflows the body no matter what its own
-    // max-width says. The frame is `scrolling="no"` (it auto-sizes to its
-    // content, so a scrollbar of its own would be wrong), which means that
-    // overflow is not scrolled but LOST: the reader sees a table sliced off at
-    // the bubble's edge with no indication there is more.
-    //
-    // `display:block` turns the table into a scroll container while its rows
-    // and cells keep generating anonymous table boxes, so it still lays out as
-    // a table — the long-standing fix, and the one the view this library was
-    // extracted from shipped. `width:max-content` restores the shrink-to-fit
-    // that `display:block` would otherwise cost a narrow table.
-    'table{display:block;width:max-content;max-width:100%;overflow-x:auto;}',
+    // There is deliberately no blanket `table{display:block;overflow-x:auto}`
+    // here. It was the first fix and it does make every table scrollable, but
+    // designed mail is BUILT out of table shells, and restructuring all of them
+    // to rescue the few that overflow takes apart layouts that were fine. The
+    // measured pass reaches the same tables and leaves the rest as authored.
+    WIDE_TABLE_CSS,
     // The same rescue, for the other thing that arrives wider than the bubble.
     // `<pre>` is one of the two reasons a body is framed at all, and its whole
     // point is that it does NOT wrap — so without this a code block or a
     // fixed-width ASCII receipt is sliced off at the bubble's edge and, the
     // frame being `scrolling="no"`, there is no way to reach the rest of it.
     'pre{max-width:100%;overflow-x:auto;}',
+    // Soften a colour the SENDER chose for a cell, rather than dropping it.
+    //
+    // The bubble now carries the sender's own identity colour (see
+    // `ChatBubble`), and the frame is transparent, so a message that paints its
+    // header row cyan puts a saturated block on top of that tint: two colours
+    // competing inside one bubble, and white header text that stops being
+    // readable the moment the reader's theme is not the one the sender assumed.
+    // Compositing a translucent theme wash OVER the sender's colour keeps their
+    // hue — it reads as a pastel of the same colour — while the bubble stays
+    // the thing that says who is speaking.
+    //
+    // `background-image` rather than `background-color`, because a gradient
+    // paints ON TOP of the colour instead of replacing it; that is what leaves
+    // the sender's hue showing through the alpha.
+    //
+    // This is the one place the frame uses `!important`, against the rule
+    // stated above. It has to: the colours being softened are inline
+    // `style="background-color:…"` on the cell, which a normal author
+    // declaration cannot reach. Scoped to cells that actually declare a
+    // background, so a plain table is untouched.
+    `${WASHED_CELLS}{`,
+    `background-image:linear-gradient(${theme.wash},${theme.wash})!important;`,
+    `color:${theme.ink}!important;}`,
+    // And everything INSIDE such a cell. Outlook wraps a cell's text in a
+    // `<div style="color:white">`, which the rule above cannot reach — so a
+    // header the sender wrote as white-on-navy kept its white text once the
+    // navy was lightened, and came out white on pale grey. The colour has to
+    // follow the background it was chosen against.
+    `${WASHED_CELLS.split(',')
+      .map((selector) => `${selector} *`)
+      .join(',')}{color:${theme.ink}!important;}`,
     `blockquote{margin:0 0 0 .5em;padding-left:.75em;border-left:2px solid ${theme.border};color:${theme.muted};}`,
     'p{margin:0 0 .5em;}',
     'p:last-child{margin-bottom:0;}',

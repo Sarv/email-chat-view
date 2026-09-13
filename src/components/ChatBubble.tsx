@@ -11,7 +11,7 @@
  * render slots. A component that reached for `window.open` or an Electron IPC
  * channel of its own would work in exactly one application.
  */
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, type CSSProperties, type ReactNode } from 'react';
 
 import type { HtmlParser } from '../dom.js';
 import type { Attachment, ChatMessage } from '../types.js';
@@ -273,10 +273,36 @@ export function ChatBubble({
           // The audit trail, in the DOM. "Why did part of my email disappear?"
           // is answerable with devtools instead of a rebuild.
           data-sec-applied={message.applied?.length ? message.applied.join(' ') : undefined}
-          // The sender tint is skipped for a document: it would sit behind the
-          // mail's own background, visible only as a coloured rim. The avatar
-          // and the sender name above the bubble carry that colour instead.
-          style={!isMine && color && !isDocument ? { backgroundColor: color.bubble } : undefined}
+          // Every bubble carries its sender's own colour, documents included.
+          // A document used to be exempt on the grounds that its own background
+          // would hide the tint — but most mail leaves large areas transparent,
+          // so what the reader actually got was an untinted white card in a
+          // column of coloured ones, and no way to tell at a glance who sent
+          // it. Where the mail DOES paint its own background the tint is simply
+          // covered, which costs nothing; and the colours it paints into table
+          // cells are softened inside the frame (see `buildFrameCss`) so they
+          // read as pastels of the sender's hue rather than competing with it.
+          //
+          // The rim goes on with the fill, and for a document it is the half
+          // that does the work: the mail's own surface covers the wash, so
+          // without a coloured border a designed mail is a white card in a
+          // column of coloured ones. `--doc` widens it into a visible spine.
+          //
+          // `--sec-doc-page` is the same colour again, opaque. A document's
+          // frame is transparent, so it needs a solid page to be printed on —
+          // handed over as a custom property rather than as a prop because the
+          // element that paints it is inside `SandboxedBody`, and because the
+          // frame's own cell wash is derived from it in the stylesheet, which
+          // keeps the page and the colours softened against it in one family.
+          style={
+            !isMine && color
+              ? ({
+                  backgroundColor: color.bubble,
+                  borderColor: color.edge,
+                  '--sec-doc-page': color.page,
+                } as CSSProperties)
+              : undefined
+          }
         >
           <MessageBody
             message={message}
