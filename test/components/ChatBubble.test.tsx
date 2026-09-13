@@ -186,6 +186,33 @@ describe('ChatBubble', () => {
     expect(bubble.style.backgroundColor).toBe(COLOR.bubble);
   });
 
+  // Regression: THE "big thread breaks" bug, from the outside. A letter is
+  // long, not designed: it brings no background and no margins of its own, so
+  // the document treatment — no padding, no tint, no shadow, content to the
+  // card's edge — leaves the reader looking at text jammed against a bare
+  // border. It must render as an ordinary bubble, inline.
+  it('keeps a long text-only mail an ordinary padded, tinted bubble', () => {
+    const body = `<p>${'Thanks for the update, I will take a look today. '.repeat(12)}</p>`;
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage({ body })}
+        color={COLOR}
+        labels={DEFAULT_LABELS}
+        {...FIXED}
+      />,
+    );
+    const bubble = container.querySelector('.sec-bubble') as HTMLElement;
+    expect(bubble.className).not.toContain('sec-bubble--doc');
+    expect(bubble.style.backgroundColor).toBe(COLOR.bubble);
+    // Inline, so the words are in the host's own DOM rather than an iframe the
+    // reader cannot select across.
+    expect(container.querySelector('.sec-body')).not.toBeNull();
+    expect(container.querySelector('.sec-frame')).toBeNull();
+    // Still too long to hug: a letter wrapped in a column the width of its
+    // longest paragraph is the other half of this looking wrong.
+    expect(bubble.className).toContain('sec-bubble--wide');
+  });
+
   // Regression: end-to-end cover for the "screenful of blank under the last
   // line" bug. The bubble must render the SHAPE's html, not `message.body` —
   // wire it to the original and the trailing empty wrappers come back, and a

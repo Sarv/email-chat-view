@@ -150,6 +150,16 @@ describe('buildFrameCss', () => {
     expect(rule).toContain('max-width:100%');
   });
 
+  // Regression: the same clipping, for the other thing that arrives wider than
+  // the bubble. `<pre>` does not wrap by definition, so a code block or a
+  // fixed-width receipt is cut off at the frame's edge — and the frame has no
+  // scrollbar of its own to reach the rest with.
+  it('lets a wide pre block scroll inside itself instead of being clipped', () => {
+    const rule = buildFrameCss(theme).match(/pre\{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toContain('overflow-x:auto');
+    expect(rule).toContain('max-width:100%');
+  });
+
   // Regression: `display:block` costs a table its shrink-to-fit — a two-cell
   // table would stretch across the whole bubble. `width:max-content` gives it
   // back, with `max-width` still capping it at the bubble's edge.

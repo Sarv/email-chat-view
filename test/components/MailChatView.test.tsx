@@ -34,6 +34,43 @@ afterEach(async () => {
 });
 
 describe('MailChatView', () => {
+  // Regression: the thread signal has to actually REACH the bubbles, and the
+  // view is the only thing that can see a thread. A reply whose sign-off
+  // wrapper survived the signature strip used to be framed as a "document" —
+  // no padding, no tint, words against the bare edge of the card — in the
+  // middle of an ordinary back-and-forth.
+  describe('thread tone', () => {
+    const signed =
+      '<p>Tuesday works for me.</p>' +
+      '<table><tr><td>Amit Shukla</td></tr><tr><td>Engineering Lead</td></tr></table>';
+
+    it('renders a signature wrapper inline when people are talking', async () => {
+      const messages = thread(3);
+      messages[2] = { ...messages[2], body: signed } as ChatMessage;
+      const { container } = renderView({ messages });
+      await settleFrameLoad();
+
+      const bubbles = container.querySelectorAll('.sec-bubble');
+      const last = bubbles[bubbles.length - 1] as HTMLElement;
+      expect(last.className).not.toContain('sec-bubble--doc');
+      expect(container.querySelector('.sec-frame')).toBeNull();
+    });
+
+    // The other half: one sender and no reply is exactly where designed mail
+    // lives, so the same markup must keep its frame there.
+    it('frames the same body in a one-sided thread', async () => {
+      const { container } = renderView({
+        messages: [
+          chatMessage({ id: 'n1', fromAddress: 'news@vendor.example', body: signed }),
+          chatMessage({ id: 'n2', fromAddress: 'news@vendor.example', body: signed }),
+        ],
+      });
+      await settleFrameLoad();
+
+      expect(container.querySelector('.sec-bubble')?.className).toContain('sec-bubble--doc');
+    });
+  });
+
   // Regression: ghost bubbles say something a spinner cannot — that what is
   // coming is a conversation, roughly this long. But only while there is
   // nothing to show: once messages exist they win, or a background refresh

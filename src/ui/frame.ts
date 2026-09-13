@@ -111,6 +111,12 @@ export function buildFrameCss(theme: FrameTheme): string {
     // extracted from shipped. `width:max-content` restores the shrink-to-fit
     // that `display:block` would otherwise cost a narrow table.
     'table{display:block;width:max-content;max-width:100%;overflow-x:auto;}',
+    // The same rescue, for the other thing that arrives wider than the bubble.
+    // `<pre>` is one of the two reasons a body is framed at all, and its whole
+    // point is that it does NOT wrap — so without this a code block or a
+    // fixed-width ASCII receipt is sliced off at the bubble's edge and, the
+    // frame being `scrolling="no"`, there is no way to reach the rest of it.
+    'pre{max-width:100%;overflow-x:auto;}',
     `blockquote{margin:0 0 0 .5em;padding-left:.75em;border-left:2px solid ${theme.border};color:${theme.muted};}`,
     'p{margin:0 0 .5em;}',
     'p:last-child{margin-bottom:0;}',

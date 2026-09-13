@@ -1,13 +1,22 @@
 /**
  * Deciding how one body should be rendered.
  *
- * A cleaned email body is one of two very different things. Most of them are a
- * few sentences of text with a link in them, and those belong INLINE in the
- * bubble, where they inherit the app's font, wrap with the layout, and let the
- * bubble hug its content. A minority are real documents — a table-based
- * newsletter, a signature with a logo, a receipt — and those need an iframe,
- * because their own CSS would otherwise leak into the host application and
- * their layout needs a sized containing block.
+ * A cleaned email body is one of two very different things. Most of them are
+ * text with a link in them, and those belong INLINE in the bubble, where they
+ * inherit the app's font, wrap with the layout, and take the bubble's padding
+ * and tint. A minority are real documents — a table-based newsletter, a
+ * signature with a logo, a receipt — and those need an iframe, because their
+ * own CSS would otherwise leak into the host application and their layout needs
+ * a sized containing block.
+ *
+ * LENGTH IS NOT WHAT SEPARATES THEM, and conflating the two is the bug this
+ * split exists to prevent: a long letter used to be framed purely for being
+ * long, which handed a plain text message the treatment a designed document
+ * needs — a frame with no padding of its own, inside a bubble that drops its
+ * padding and its tint so the document can reach the card's edge. The reader
+ * got their correspondent's words jammed against the border of an untinted box,
+ * clipped at the right edge, with a screenful of dead frame under the last line.
+ * Length is answered separately, by `long`, and it decides WIDTH only.
  *
  * Answered by PARSING the body, once, rather than by pattern-matching the
  * markup. The regex version of this ("does the string contain `<table`?") gets
@@ -22,6 +31,7 @@ import {
   isElement,
   isIgnorableNode,
   normalizedText,
+  safeQueryAll,
 } from '../transform/node-utils.js';
 
 /**
@@ -33,16 +43,71 @@ import {
  */
 const RICH_SELECTOR = `${EMBEDDED_MEDIA_SELECTOR},pre`;
 
-/** Longer than this and the bubble stops being a chat message. */
+/**
+ * The one rich marker that is LAYOUT rather than media.
+ *
+ * Everything else in {@link RICH_SELECTOR} is content in its own right — an
+ * image, a video, a chart, a block of preformatted text — and the inline path
+ * would drop it on the floor, so none of it is ever reconsidered. A `<table>`
+ * is different: in mail it is usually a wrapper, and unwrapping one costs
+ * nothing but the wrapper. It is therefore the only marker a conversational
+ * thread is allowed to reinterpret. See {@link isConversationalThread}.
+ */
+const LAYOUT_TAG = 'table';
+
+/**
+ * {@link RICH_SELECTOR} without the layout table.
+ *
+ * Derived from the shared list rather than re-typed, so a tag added to
+ * {@link EMBEDDED_MEDIA_SELECTOR} cannot be silently missing from this one.
+ */
+const RICH_WITHOUT_LAYOUT_TABLES = [
+  ...EMBEDDED_MEDIA_SELECTOR.split(',').filter((tag) => tag.trim() !== LAYOUT_TAG),
+  'pre',
+].join(',');
+
+/**
+ * Rows at which a table stops looking like a wrapper and starts looking like a
+ * grid somebody actually meant.
+ *
+ * A signature block is one or two rows — a logo beside a name, a name over a
+ * title. Three is where a reader would start reading DOWN a column, and
+ * flattening that loses the only thing it was for.
+ */
+const DATA_TABLE_MIN_ROWS = 3;
+
+/**
+ * Whether a table is data the reader would lose, rather than a wrapper.
+ *
+ * A header cell settles it outright — nobody writes a `<th>` to indent a
+ * signature. Failing that, height does: see {@link DATA_TABLE_MIN_ROWS}.
+ *
+ * Errs toward DATA. Calling a grid a wrapper flattens it into a run-on
+ * paragraph with nothing on screen to say so, which is silent damage; calling a
+ * wrapper a grid merely frames a message that would have looked better inline.
+ */
+function isDataTable(table: Element): boolean {
+  if (safeQueryAll(table, 'th').length > 0) return true;
+  return safeQueryAll(table, 'tr').length >= DATA_TABLE_MIN_ROWS;
+}
+
+/**
+ * Longer than this and the bubble stops hugging its text.
+ *
+ * A width decision, not a rendering one: a two-word reply should look like a
+ * two-word reply, and a letter should not be forced to wrap in a column the
+ * width of its longest paragraph. What it must NOT decide is whether the body
+ * is framed — see the module header.
+ */
 export const SIMPLE_TEXT_LIMIT = 350;
 
 /** How a body should be rendered. */
 export type BodyKind =
   /** Nothing to show — the reader gets the "no content" note. */
   | 'empty'
-  /** Short, text-only: render inline in the bubble. */
+  /** Text and inline markup: render inline in the bubble, at any length. */
   | 'simple'
-  /** Markup with layout or media: render in a sandboxed frame. */
+  /** Brings its own layout or media: render in a sandboxed frame. */
   | 'rich';
 
 /** Everything the view needs to know about one body, from one parse. */
@@ -58,6 +123,13 @@ export interface BodyShape {
   /** The visible text, whitespace collapsed. Used for length and for `title`. */
   text: string;
   /**
+   * Whether the body is long enough that the bubble should stop hugging it.
+   *
+   * Independent of `kind`: a long letter is still a chat message and still
+   * renders inline. All this says is that it deserves the full column.
+   */
+  long: boolean;
+  /**
    * Whether the body pulls images off the network.
    *
    * Drives the tracking-pixel banner, so it errs toward TRUE: claiming there
@@ -67,7 +139,13 @@ export interface BodyShape {
 }
 
 /** Nothing parsed, nothing to render. */
-const EMPTY_SHAPE: BodyShape = { kind: 'empty', html: '', text: '', hasRemoteImages: false };
+const EMPTY_SHAPE: BodyShape = {
+  kind: 'empty',
+  html: '',
+  text: '',
+  long: false,
+  hasRemoteImages: false,
+};
 
 /**
  * The most conservative answer available: frame it, and assume it phones home.
@@ -79,7 +157,7 @@ const EMPTY_SHAPE: BodyShape = { kind: 'empty', html: '', text: '', hasRemoteIma
  * that cannot render one message must still render the other 199.
  */
 function unparseableShape(html: string): BodyShape {
-  return { kind: 'rich', html, text: '', hasRemoteImages: true };
+  return { kind: 'rich', html, text: '', long: true, hasRemoteImages: true };
 }
 
 /**
@@ -139,8 +217,22 @@ function isRemoteSource(source: string | null): boolean {
 export interface InspectBodyOptions {
   /** Parser to use. Defaults to the platform `DOMParser`. */
   parser?: HtmlParser;
-  /** Override the inline-vs-frame text threshold. */
+  /** Override the hug-vs-full-width text threshold. */
   textLimit?: number;
+  /**
+   * Whether this body arrived in a thread where people are writing to each
+   * other — see {@link isConversationalThread}.
+   *
+   * Narrows what counts as a document: a `<table>` in a conversation is read as
+   * the signature wrapper or client indentation it almost always is, unless it
+   * is big enough to be data (see {@link isDataTable}). Media and preformatted
+   * text still frame the body, conversation or not, because the inline path
+   * would throw them away.
+   *
+   * Defaults to false, which is the conservative answer: a thread we know
+   * nothing about is treated as though it might be a newsletter.
+   */
+  conversational?: boolean;
 }
 
 /**
@@ -164,7 +256,7 @@ export function inspectBody(
   const source = (html ?? '').trim();
   if (!source) return EMPTY_SHAPE;
 
-  const { parser, textLimit = SIMPLE_TEXT_LIMIT } = options;
+  const { parser, textLimit = SIMPLE_TEXT_LIMIT, conversational = false } = options;
 
   // No initialiser: the `catch` returns, so the only way past this block is
   // with the parse result assigned.
@@ -189,9 +281,22 @@ export function inspectBody(
     // divs, a stray `<br>`, a wrapper the strip passes hollowed out — renders
     // as blank space, so say so and let the bubble show its "no content" note
     // instead of an empty shell the reader stares at.
-    return { kind: 'empty', html: '', text: '', hasRemoteImages };
+    return { kind: 'empty', html: '', text: '', long: false, hasRemoteImages };
   }
 
-  const rich = text.length > textLimit || Boolean(body.querySelector(RICH_SELECTOR));
-  return { kind: rich ? 'rich' : 'simple', html: body.innerHTML, text, hasRemoteImages };
+  // Only markup that brings its own layout earns a frame. Length is answered
+  // beside it, never instead of it.
+  const designed = conversational
+    ? // In a conversation a bare table is a sign-off wrapper, not a newsletter,
+      // so it only counts when it is big enough to be data the reader would miss.
+      Boolean(body.querySelector(RICH_WITHOUT_LAYOUT_TABLES)) ||
+      safeQueryAll(body, LAYOUT_TAG).some(isDataTable)
+    : Boolean(body.querySelector(RICH_SELECTOR));
+  return {
+    kind: designed ? 'rich' : 'simple',
+    html: body.innerHTML,
+    text,
+    long: text.length > textLimit,
+    hasRemoteImages,
+  };
 }

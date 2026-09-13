@@ -118,6 +118,7 @@ describe('MessageBody', () => {
           kind: 'simple',
           html: message.body,
           text: 'steal()',
+          long: false,
           hasRemoteImages: false,
         }}
         labels={DEFAULT_LABELS}

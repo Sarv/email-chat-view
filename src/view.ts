@@ -54,6 +54,7 @@ export { DEFAULT_SENDER_RUN_MS, groupMessagesByDate, isSameSenderRun } from './u
 export type { DateGroup } from './ui/grouping.js';
 export { inspectBody, SIMPLE_TEXT_LIMIT } from './ui/body-shape.js';
 export type { BodyKind, BodyShape, InspectBodyOptions } from './ui/body-shape.js';
+export { isConversationalThread } from './ui/thread-tone.js';
 
 // --- Dates -------------------------------------------------------------------
 export {

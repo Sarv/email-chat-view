@@ -109,6 +109,14 @@ export interface ChatBubbleProps {
   now?: number;
   /** HTML parser, for environments with no global `DOMParser`. */
   parser?: HtmlParser;
+  /**
+   * Whether this message's thread is people writing to each other.
+   *
+   * `MailChatView` works this out for the whole thread and passes it down; a
+   * bubble rendered on its own has no thread to look at and defaults to false.
+   * It narrows what counts as a designed document — see `inspectBody`.
+   */
+  conversational?: boolean;
   /** Withhold network images until the reader asks. Default true. */
   blockRemoteImages?: boolean;
   onOpenLink?: (url: string) => void;
@@ -137,6 +145,7 @@ export function ChatBubble({
   locale,
   now,
   parser,
+  conversational,
   blockRemoteImages,
   onOpenLink,
   onRetryBody,
@@ -150,7 +159,10 @@ export function ChatBubble({
 
   // One parse per body, reused for three decisions: inline or framed, whether
   // there is anything to show at all, and whether to offer the image banner.
-  const shape = useMemo(() => inspectBody(message.body, { parser }), [message.body, parser]);
+  const shape = useMemo(
+    () => inspectBody(message.body, { parser, conversational }),
+    [message.body, parser, conversational],
+  );
 
   // `?? false` and not `?? true`: when the transform could not work out whose
   // message this is, `isFromMe` is undefined, and left-aligning everything is
@@ -184,11 +196,16 @@ export function ChatBubble({
   // its own background, its own margins and often its own colour scheme. Tint
   // and pad it like a bubble and the reader gets a card inside a card. So a
   // framed body keeps the container and loses the costume.
+  //
+  // `shape.kind`, never the body's LENGTH. A long letter is still a chat
+  // message: stripping its padding and its tint for being long is what put the
+  // sender's words against the bare edge of an untinted box.
   const isDocument = shape.kind === 'rich';
   // A framed body needs a sized containing block, so its bubble takes the full
-  // column. A short inline one hugs its text, which is what makes a two-word
-  // reply look like a two-word reply.
-  const hug = !isDocument;
+  // column — and so does a long one, which would otherwise wrap in a column the
+  // width of its longest paragraph. A short inline one hugs its text, which is
+  // what makes a two-word reply look like a two-word reply.
+  const hug = !isDocument && !shape.long;
 
   const rowClasses = ['sec-row', isMine ? 'sec-row--mine' : 'sec-row--theirs', className]
     .filter(Boolean)

@@ -494,6 +494,20 @@
   color: var(--sec-muted);
 }
 
+/* Mail uses headings, and a bubble is not a page: the browser's defaults (2em,
+   margins to match) are a document's scale. Brought back to the bubble's own
+   type and distinguished by weight, which is what a heading means here. */
+.sec-body h1,
+.sec-body h2,
+.sec-body h3,
+.sec-body h4,
+.sec-body h5,
+.sec-body h6 {
+  margin-block: var(--sec-gap) var(--sec-gap-sm);
+  font-size: inherit;
+  font-weight: var(--sec-fw-semi);
+}
+
 .sec-body code {
   padding: 0 var(--sec-gap-sm);
   border-radius: var(--sec-radius-sm);

@@ -8,7 +8,7 @@ const options = { parser };
 
 describe('inspectBody', () => {
   it('reports nothing to render for a missing body', () => {
-    const nothing = { kind: 'empty', html: '', text: '', hasRemoteImages: false };
+    const nothing = { kind: 'empty', html: '', text: '', long: false, hasRemoteImages: false };
     expect(inspectBody(undefined, options)).toEqual(nothing);
     expect(inspectBody(null, options)).toEqual(nothing);
     expect(inspectBody('   ', options)).toEqual(nothing);
@@ -34,15 +34,92 @@ describe('inspectBody', () => {
     expect(shape.hasRemoteImages).toBe(false);
   });
 
-  it('frames a body longer than the text limit', () => {
-    const long = `<p>${'word '.repeat(SIMPLE_TEXT_LIMIT)}</p>`;
-    expect(inspectBody(long, options).kind).toBe('rich');
+  // Regression: THE "big thread breaks" bug. Length used to force a body into
+  // the frame, and the bubble strips its padding and its tint for a framed body
+  // so a designed document can reach the card's edge. A plain letter got that
+  // treatment for no reason but its length: the sender's words rendered flush
+  // against the bare border of an untinted box, clipped on the right, with a
+  // screenful of dead frame under the last line.
+  it('keeps a long text-only body inline', () => {
+    const body = `<p>${'word '.repeat(SIMPLE_TEXT_LIMIT)}</p>`;
+    const shape = inspectBody(body, options);
+    expect(shape.kind).toBe('simple');
+    // It is still too long to hug — that is a width decision, and a separate
+    // answer, which is the whole point of splitting them.
+    expect(shape.long).toBe(true);
+  });
+
+  it('reports a short body as neither framed nor long', () => {
+    const shape = inspectBody('<p>Sounds good.</p>', options);
+    expect(shape.kind).toBe('simple');
+    expect(shape.long).toBe(false);
   });
 
   it('honours a caller’s own text limit', () => {
     const body = '<p>0123456789</p>';
-    expect(inspectBody(body, { parser, textLimit: 5 }).kind).toBe('rich');
-    expect(inspectBody(body, { parser, textLimit: 50 }).kind).toBe('simple');
+    expect(inspectBody(body, { parser, textLimit: 5 }).long).toBe(true);
+    expect(inspectBody(body, { parser, textLimit: 50 }).long).toBe(false);
+    // And in neither case does it change how the body is RENDERED.
+    expect(inspectBody(body, { parser, textLimit: 5 }).kind).toBe('simple');
+  });
+
+  // Regression: the two answers are independent in both directions. A designed
+  // mail two words long is still a document, or a one-line receipt built as a
+  // table loses its layout to the inline sanitizer.
+  it('frames a short designed body and marks it not long', () => {
+    const shape = inspectBody('<table><tr><td>Hi</td></tr></table>', options);
+    expect(shape.kind).toBe('rich');
+    expect(shape.long).toBe(false);
+  });
+
+  describe('in a conversational thread', () => {
+    const talking = { parser, conversational: true };
+
+    // Regression: people writing back and forth do not send each other
+    // newsletters — but their mail clients wrap sign-offs in tables, and the
+    // signature strip does not always catch them. One leftover wrapper used to
+    // turn a two-line reply into a "document": frame, no padding, no tint.
+    it('reads a leftover signature wrapper as a message, not a document', () => {
+      const body =
+        '<p>Sounds good, Tuesday works.</p>' +
+        '<table><tr><td>Amit Shukla</td></tr><tr><td>Engineering Lead</td></tr></table>';
+      expect(inspectBody(body, talking).kind).toBe('simple');
+      // And unchanged where we know nothing about the thread: a lone message
+      // from an unknown sender is exactly where a newsletter lives.
+      expect(inspectBody(body, options).kind).toBe('rich');
+    });
+
+    // Regression: the demotion must not become content damage. The inline path
+    // unwraps a table, so a grid somebody actually meant would flatten into a
+    // run-on paragraph with nothing on screen to say it had ever been a table.
+    it('still frames a table that is data rather than a wrapper', () => {
+      const header =
+        '<table><tr><th>Env</th><th>Status</th></tr><tr><td>prod</td><td>ok</td></tr></table>';
+      expect(inspectBody(header, talking).kind).toBe('rich');
+      const tall = `<table>${'<tr><td>row</td></tr>'.repeat(3)}</table>`;
+      expect(inspectBody(tall, talking).kind).toBe('rich');
+    });
+
+    // Regression: the table is the ONLY marker a conversation reconsiders.
+    // Everything else in the rich set is content the inline sanitizer drops
+    // outright — demoting it would delete the photo somebody just sent.
+    it('still frames media and preformatted text', () => {
+      for (const markup of [
+        '<p>look</p><img src="cid:photo">',
+        '<pre>npm run build</pre>',
+        '<svg></svg>',
+        '<video></video>',
+      ]) {
+        expect(inspectBody(markup, talking).kind).toBe('rich');
+      }
+    });
+
+    // Length is orthogonal to all of it, in a conversation as anywhere else.
+    it('still answers width separately', () => {
+      const shape = inspectBody(`<p>${'word '.repeat(SIMPLE_TEXT_LIMIT)}</p>`, talking);
+      expect(shape.kind).toBe('simple');
+      expect(shape.long).toBe(true);
+    });
   });
 
   // Regression: THE reason a rich body goes in a frame. A table-based
@@ -108,7 +185,13 @@ describe('inspectBody', () => {
   it('falls back to the safest possible answer when the parser fails', () => {
     // The html is the ORIGINAL: a body we could not parse is one we have no
     // business trimming, and returning '' here would blank the message.
-    const expected = { kind: 'rich', html: '<p>hi</p>', text: '', hasRemoteImages: true };
+    const expected = {
+      kind: 'rich',
+      html: '<p>hi</p>',
+      text: '',
+      long: true,
+      hasRemoteImages: true,
+    };
     expect(inspectBody('<p>hi</p>', { parser: throwingParser })).toEqual(expected);
     expect(inspectBody('<p>hi</p>', { parser: bodylessParser })).toEqual(expected);
   });
@@ -120,6 +203,7 @@ describe('inspectBody', () => {
       kind: 'rich',
       html: '<p>hi</p>',
       text: '',
+      long: true,
       hasRemoteImages: true,
     });
   });
@@ -169,12 +253,13 @@ describe('inspectBody trailing dead space', () => {
   });
 
   // Regression: the trim runs BEFORE the body is measured and classified, so a
-  // message that is only just over the inline limit is not pushed into a frame
-  // by whitespace the reader never sees.
+  // message that is only just over the hug limit is not widened to the full
+  // column by whitespace the reader never sees.
   it('measures and classifies what is left, not what arrived', () => {
     const tail = '<div><br></div>'.repeat(40);
     const shape = inspectBody(`<p>0123456789</p>${tail}`, { parser, textLimit: 10 });
     expect(shape.kind).toBe('simple');
+    expect(shape.long).toBe(false);
     expect(shape.text).toBe('0123456789');
   });
 

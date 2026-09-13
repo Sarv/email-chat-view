@@ -20,6 +20,7 @@ import type { Attachment, ChatMessage } from '../types.js';
 import { DEFAULT_SENDER_RUN_MS, groupMessagesByDate, isSameSenderRun } from '../ui/grouping.js';
 import { fillTemplate, resolveLabels, type ViewLabels } from '../ui/labels.js';
 import { buildSenderColorMap, resolveSenderColor } from '../ui/sender-colors.js';
+import { isConversationalThread } from '../ui/thread-tone.js';
 
 import { ChatBubble } from './ChatBubble.js';
 import { ChatSkeleton } from './ChatSkeleton.js';
@@ -166,6 +167,11 @@ export function MailChatView({
       own,
     );
   }, [messages, currentUserAddress]);
+
+  // Read off the WHOLE thread, not the rendered slice, for the same reason the
+  // colours are: revealing older messages must not change how the ones already
+  // on screen are rendered.
+  const conversational = useMemo(() => isConversationalThread(messages), [messages]);
 
   const groups = useMemo(
     () => groupMessagesByDate(rendered, resolvedLabels, locale, now),
@@ -315,6 +321,7 @@ export function MailChatView({
                   locale={locale}
                   now={now}
                   parser={parser}
+                  conversational={conversational}
                   blockRemoteImages={
                     typeof blockRemoteImages === 'function'
                       ? blockRemoteImages(message)

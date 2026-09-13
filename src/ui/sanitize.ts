@@ -55,6 +55,15 @@ export const INLINE_ALLOWED_TAGS = [
   'li',
   'code',
   'blockquote',
+  // A letter of any length renders inline now (see `ui/body-shape.ts`), and
+  // real mail has headings in it. They carry no attributes and no risk; without
+  // them `KEEP_CONTENT` flattens a section title into the paragraph under it.
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
 ];
 
 /** The only attribute the inline path keeps. */

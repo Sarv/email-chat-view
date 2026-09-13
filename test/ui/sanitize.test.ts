@@ -29,6 +29,15 @@ describe('sanitizeInlineHtml', () => {
     );
   });
 
+  // Regression: a letter of any length renders inline now, and real mail has
+  // section headings in it. Without them on the allowlist `KEEP_CONTENT`
+  // unwraps a heading and it reads as the first line of the paragraph below.
+  it('keeps the headings a long letter is written with', () => {
+    expect(sanitizeInlineHtml('<h2>Next steps</h2><p>Run the seed script.</p>')).toBe(
+      '<h2>Next steps</h2><p>Run the seed script.</p>',
+    );
+  });
+
   it('removes scripts and event handlers', () => {
     expect(sanitizeInlineHtml('<p onclick="steal()">hi</p><script>steal()</script>')).toBe(
       '<p>hi</p>',
