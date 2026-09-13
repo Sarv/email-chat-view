@@ -28,6 +28,7 @@ import {
 } from '../ui/frame.js';
 import type { ViewLabels } from '../ui/labels.js';
 import { sanitizeFrameHtml } from '../ui/sanitize.js';
+import { fitWideTables } from '../ui/wide-tables.js';
 
 import { ImageOffIcon } from './icons.js';
 
@@ -96,6 +97,10 @@ export function SandboxedBody({
     let watched: Document | null = null;
 
     const measure = () => {
+      // Before the height is taken, not after: letting a too-wide table wrap
+      // makes it taller, so measuring first would size the frame to the
+      // unwrapped layout and clip the rows the reflow added.
+      fitWideTables(frame.contentDocument);
       const next = measureFrameHeight(frame.contentDocument);
       if (next <= 0) return;
       setHeight(next);

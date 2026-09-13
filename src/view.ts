@@ -107,3 +107,12 @@ export {
   readFrameTheme,
 } from './ui/frame.js';
 export type { FrameDocumentOptions, FrameTheme } from './ui/frame.js';
+// Exported because a host that renders message bodies in its OWN frame (the
+// standard, non-chat reading pane) has exactly the same problem and should not
+// carry a second copy of the measurement.
+export {
+  fitWideTables,
+  TABLE_REFLOW_CLASS,
+  TABLE_SCROLL_CLASS,
+  WIDE_TABLE_CSS,
+} from './ui/wide-tables.js';
