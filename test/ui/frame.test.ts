@@ -357,6 +357,49 @@ describe('measureFrameHeight', () => {
     ).toBe(400);
   });
 
+  // Regression: THE trailing-blank-space bug. `documentElement.scrollHeight` is
+  // never less than the viewport, and the viewport of a frame sized to its own
+  // content is the height we set after the last measurement — so feeding it
+  // back in made the measurement a ratchet that could grow but never shrink.
+  // A real mail measured 838 for 328px of content: a bubble with five hundred
+  // pixels of empty space under the last line, which no later pass could undo.
+  it('ignores a scroll height that is only the viewport', () => {
+    expect(
+      measureFrameHeight(
+        fakeDoc({
+          rangeBottom: 328,
+          bodyScrollHeight: 328,
+          documentElement: { scrollHeight: 838, clientHeight: 838 },
+        }),
+      ),
+    ).toBe(328);
+  });
+
+  // ...but the value still has something to say when content REALLY overflows
+  // the viewport, which is the case it was there for: floated and
+  // absolutely-positioned boxes that sit outside the Range's box. Drop it
+  // unconditionally and a long message is clipped instead.
+  it('keeps a scroll height that overflows the viewport', () => {
+    expect(
+      measureFrameHeight(
+        fakeDoc({
+          rangeBottom: 300,
+          bodyScrollHeight: 300,
+          documentElement: { scrollHeight: 2000, clientHeight: 838 },
+        }),
+      ),
+    ).toBe(2000);
+  });
+
+  // Regression: a viewport we cannot read is not evidence that nothing
+  // overflows. Under-measuring clips the message, so an unreadable
+  // `clientHeight` keeps the scroll height rather than discarding it.
+  it('keeps the scroll height when the viewport cannot be read', () => {
+    expect(
+      measureFrameHeight(fakeDoc({ rangeBottom: 40, documentElement: { scrollHeight: 400 } })),
+    ).toBe(400);
+  });
+
   // Regression: a document that refuses a Range must still be measured. The
   // scroll heights alone are enough — they just include the trailing margin.
   it('falls back to the scroll heights when there is no Range support', () => {

@@ -274,8 +274,36 @@ export function measureFrameHeight(doc: Document | null | undefined): number {
     // below are enough on their own; they just include trailing margins.
   }
 
-  const scrollHeights = [body.scrollHeight, doc.documentElement?.scrollHeight ?? 0];
-  return Math.max(height, ...scrollHeights.map((value) => (Number.isFinite(value) ? value : 0)));
+  const finite = (value: number): number => (Number.isFinite(value) ? value : 0);
+  return Math.max(height, finite(body.scrollHeight), finite(rootOverflow(doc)));
+}
+
+/**
+ * How far the document's content overflows the frame's viewport — 0 when it
+ * does not.
+ *
+ * `documentElement.scrollHeight` is never less than the VIEWPORT, and the
+ * viewport of a frame sized to its own content is the height we set after the
+ * last measurement. Feeding it back into the maximum therefore makes the
+ * measurement a ratchet: it can grow but can never shrink, so a short message
+ * keeps whatever height it was first given and the reader gets a bubble with
+ * hundreds of pixels of empty space under the last line. Observed on a real
+ * mail whose content is 328px inside a frame still reporting 838.
+ *
+ * `scrollHeight > clientHeight` is precisely the case where something really
+ * does overflow the viewport, which is the only case the value has anything to
+ * say about the content — the floated and absolutely-positioned boxes the
+ * Range's box misses. When nothing overflows it is only the viewport again, and
+ * the body and the Range already have the answer.
+ */
+function rootOverflow(doc: Document): number {
+  const root = doc.documentElement;
+  if (!root) return 0;
+  // Only a viewport we can actually read is evidence of anything. Where
+  // `clientHeight` is missing the value is kept, because the cost of dropping
+  // it is a clipped message and the cost of keeping it is empty space.
+  const viewport = Number.isFinite(root.clientHeight) ? root.clientHeight : 0;
+  return root.scrollHeight > viewport ? root.scrollHeight : 0;
 }
 
 /** Schemes a click inside a message may be routed to. */
