@@ -339,6 +339,7 @@ and correctly revealed:
 | --- | --- |
 | `renderActions(message)` | at the bubble's **outer edge**, outside the bubble box — left of your own messages, right of everyone else's. Hidden at `opacity: 0`, revealed on row `:hover` **and on `:focus-within`**, so it is reachable by keyboard, not just by mouse |
 | `renderFooter(message)` | **inside** the column, below the body — for something that belongs to the message rather than acting on it: an inline reply box, a translation notice, an extraction warning |
+| `renderHeaderMeta(message)` | on the **header line, after the timestamp** — for a mark that qualifies the message itself: a security shield, a verified-sender tick, a label. A follow-up in a sender run has no header and still gets it, in a row of its own: sender and time are inherited from the bubble above, a per-message judgement is not |
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Sarv/email-chat-view/main/docs/media/render-slots.png"
@@ -898,7 +899,7 @@ they are not on the `/transform` entry.
 | Group | Props |
 | --- | --- |
 | **Data** | `messages` (the only required one), `currentUserAddress`, `locale`, `now`, `parser` |
-| **Your UI** | `renderActions(message)`, `renderFooter(message)`, `emptyState`, `labels`, `className` |
+| **Your UI** | `renderActions(message)`, `renderFooter(message)`, `renderHeaderMeta(message)`, `emptyState`, `labels`, `className` |
 | **Your handlers** | `onOpenLink`, `onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment` |
 | **Paging & scale** | `hasOlder`, `onLoadOlder`, `loadingOlder`, `onVisibleRangeChange`, `maxRendered`, `autoScroll`, `loading` |
 | **Presentation** | `senderRunWindowMs`, `blockRemoteImages` |
