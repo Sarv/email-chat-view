@@ -198,7 +198,9 @@ describe('buildFrameCss', () => {
   // Swap it for `background-color` and the colour is not softened, it is gone.
   it('softens a sender cell colour instead of replacing it', () => {
     const css = buildFrameCss(theme);
-    expect(css).toContain(`background-image:linear-gradient(${theme.wash},${theme.wash})!important`);
+    expect(css).toContain(
+      `background-image:linear-gradient(${theme.wash},${theme.wash})!important`,
+    );
     // Only cells that actually declare a colour; a plain table is untouched.
     expect(css).toContain('td[bgcolor]');
     expect(css).toContain('td[style*="background"]');
@@ -226,7 +228,12 @@ describe('buildFrameCss', () => {
   // was added for. Header and body cell must be washed by the same rule.
   it('softens a coloured body row exactly like a header row', () => {
     const css = buildFrameCss(theme);
-    for (const cell of ['td[bgcolor]', 'th[bgcolor]', 'td[style*="background"]', 'th[style*="background"]']) {
+    for (const cell of [
+      'td[bgcolor]',
+      'th[bgcolor]',
+      'td[style*="background"]',
+      'th[style*="background"]',
+    ]) {
       expect(css).toContain(cell);
     }
     // Nothing anchors the rule to a header section.

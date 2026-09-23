@@ -31,8 +31,10 @@ const sheeted = (selector: string): boolean =>
 /** A table of `cells` cells over two rows, `ruledCount` of them ruled. */
 const grid = (cells: number, ruledCount: number, attributes = ''): string => {
   const row = (from: number, count: number) =>
-    `<tr>${Array.from({ length: count }, (_unused, index) =>
-      `<td style="${from + index < ruledCount ? RULED : ''}">c</td>`).join('')}</tr>`;
+    `<tr>${Array.from(
+      { length: count },
+      (_unused, index) => `<td style="${from + index < ruledCount ? RULED : ''}">c</td>`,
+    ).join('')}</tr>`;
   const half = Math.ceil(cells / 2);
   return `<table ${attributes}>${row(0, half)}${row(half, cells - half)}</table>`;
 };
@@ -90,7 +92,7 @@ describe('isEditorWhite', () => {
   });
 });
 
-describe('dropping the editor\'s paper', () => {
+describe("dropping the editor's paper", () => {
   // Regression: THE white-slab bug. A bubble carries the sender's colour and
   // the mail is printed on it; Outlook's `<p style="background:white">` and
   // `<div class="elementToProof">` then paint an opaque white block over PART
@@ -121,8 +123,10 @@ describe('dropping the editor\'s paper', () => {
   // Regression: a colour behind an image is part of a PICTURE — a logo band or
   // a gradient header — and deleting it punches a hole in the sender's artwork.
   it('leaves a background that sits under an image', () => {
-    fit('<p style="background-color:white;background-image:url(logo.png)">hi</p>'
-      + '<div style="background-color:white;background-image:none">d</div>');
+    fit(
+      '<p style="background-color:white;background-image:url(logo.png)">hi</p>' +
+        '<div style="background-color:white;background-image:none">d</div>',
+    );
     expect(papered('p')).toBe(false);
     expect(papered('div')).toBe(true);
   });
@@ -140,7 +144,7 @@ describe('dropping the editor\'s paper', () => {
   });
 });
 
-describe('restoring a ruled table\'s sheet', () => {
+describe("restoring a ruled table's sheet", () => {
   // Regression: a data table IS drawn as paper with lines on it. Once the page
   // under it carries the sender's colour, a grid whose rows have gone that
   // colour too stops reading as a table at all — which is what the paper rule
@@ -171,8 +175,10 @@ describe('restoring a ruled table\'s sheet', () => {
   // `border:none` and `border:0` on shell cells constantly, and counting those
   // as rules would make every shell a grid.
   it('does not count a border with no style or no width', () => {
-    fit('<table><tr><td style="border-style:none">a</td><td style="border-style:hidden">b</td></tr>'
-      + '<tr><td style="border-style:solid;border-width:0">c</td><td style="border-style:solid">d</td></tr></table>');
+    fit(
+      '<table><tr><td style="border-style:none">a</td><td style="border-style:hidden">b</td></tr>' +
+        '<tr><td style="border-style:solid;border-width:0">c</td><td style="border-style:solid">d</td></tr></table>',
+    );
     expect(sheeted('table')).toBe(false);
   });
 
@@ -243,13 +249,15 @@ const fillers = (): number => document.querySelectorAll('[data-sec-filler]').len
 
 /** A ruled row of cells the sender PAINTED — the shape of a heading band. */
 const band = (...cells: string[]): string =>
-  `<tr>${cells.map((attributes) =>
-    `<td style="${RULED};background-color:#cfe2f3" ${attributes}>c</td>`).join('')}</tr>`;
+  `<tr>${cells
+    .map((attributes) => `<td style="${RULED};background-color:#cfe2f3" ${attributes}>c</td>`)
+    .join('')}</tr>`;
 
 /** The colspan each cell of the first table ended up covering, row by row. */
 const spans = (): number[][] =>
   Array.from(document.querySelectorAll('table tr'), (tr) =>
-    Array.from(tr.querySelectorAll('td,th'), (cell) => (cell as HTMLTableCellElement).colSpan));
+    Array.from(tr.querySelectorAll('td,th'), (cell) => (cell as HTMLTableCellElement).colSpan),
+  );
 
 describe('squaring off a ruled grid', () => {
   // Regression: THE notch. Word emits a last row that simply stops early, and a
@@ -344,8 +352,10 @@ describe('reading a short row the way the sender meant it', () => {
   // hint, which an engine may resolve to transparent. Reading only the cascade
   // would make every Word banner read as a data row and get padded.
   it('reads a bgcolor band as painted', () => {
-    fit(`${'<table>'}<tr><td style="${RULED}" bgcolor="#cfe2f3">c</td></tr>`
-      + `${row('', '')}${row('', '')}</table>`);
+    fit(
+      `${'<table>'}<tr><td style="${RULED}" bgcolor="#cfe2f3">c</td></tr>` +
+        `${row('', '')}${row('', '')}</table>`,
+    );
     expect(spans()[0]).toEqual([2]);
   });
 
@@ -361,8 +371,10 @@ describe('reading a short row the way the sender meant it', () => {
   // A band is painted all the way across. One coloured cell next to a plain one
   // is a data row with a highlight in it, not a heading.
   it('pads a row only some of whose cells are painted', () => {
-    fit(`${'<table>'}<tr><td style="${RULED};background-color:#cfe2f3">c</td>`
-      + `<td style="${RULED}">c</td></tr>${row('', '', '')}${row('', '', '')}</table>`);
+    fit(
+      `${'<table>'}<tr><td style="${RULED};background-color:#cfe2f3">c</td>` +
+        `<td style="${RULED}">c</td></tr>${row('', '', '')}${row('', '', '')}</table>`,
+    );
     expect(spans()[0]).toEqual([1, 1, 1]);
     expect(fillers()).toBe(1);
   });
@@ -379,8 +391,10 @@ describe('reading a short row the way the sender meant it', () => {
   // rowspan from above holds the tail of the row, so the gap is in the middle
   // and widening would collide with it.
   it('pads a band whose empty slots are not at the end', () => {
-    fit(`${'<table>'}<tr><td style="${RULED}">a</td><td style="${RULED}" rowspan="2">b</td>`
-      + `<td style="${RULED}">c</td></tr>${band('')}${row('', '', '')}</table>`);
+    fit(
+      `${'<table>'}<tr><td style="${RULED}">a</td><td style="${RULED}" rowspan="2">b</td>` +
+        `<td style="${RULED}">c</td></tr>${band('')}${row('', '', '')}</table>`,
+    );
     expect(spans()[1]).toEqual([1, 1]);
     expect(fillers()).toBe(1);
   });
@@ -402,8 +416,9 @@ describe('fitDocumentSurfaces', () => {
   it('does nothing without a document body', () => {
     expect(() => fitDocumentSurfaces(null)).not.toThrow();
     expect(() => fitDocumentSurfaces(undefined)).not.toThrow();
-    expect(() => fitDocumentSurfaces(document.implementation.createDocument(null, 'root')))
-      .not.toThrow();
+    expect(() =>
+      fitDocumentSurfaces(document.implementation.createDocument(null, 'root')),
+    ).not.toThrow();
   });
 
   // Regression: both decisions are measurements, and a document with no window
@@ -422,8 +437,9 @@ describe('documentSurfaceCss', () => {
   // on the sender's own element. Without `!important` it loses the cascade and
   // the slab stays exactly where it was.
   it('overrides the inline white it exists to remove', () => {
-    expect(documentSurfaceCss('#ffffff'))
-      .toContain(`.${PAPER_CLASS}{background-color:transparent!important;}`);
+    expect(documentSurfaceCss('#ffffff')).toContain(
+      `.${PAPER_CLASS}{background-color:transparent!important;}`,
+    );
   });
 
   // Regression: the sheet must NOT be `!important`. It is a page put UNDER the
@@ -431,8 +447,8 @@ describe('documentSurfaceCss', () => {
   // cell most of all — has to keep winning over it.
   it('lets the sender outrank the sheet', () => {
     expect(documentSurfaceCss('var(--sec-surface)')).toContain(
-      `.${TABLE_SHEET_CLASS} tr:not([bgcolor]):not([style*="background"])`
-        + '{background-color:var(--sec-surface);}',
+      `.${TABLE_SHEET_CLASS} tr:not([bgcolor]):not([style*="background"])` +
+        '{background-color:var(--sec-surface);}',
     );
   });
 

@@ -8,7 +8,12 @@ import { settleFrameLoad } from '../helpers/frames.js';
 import { chatMessage, NOW } from '../helpers/messages.js';
 
 /** Plain `rgb()` so jsdom's CSSOM hands the same string back. */
-const COLOR = { avatar: 'rgb(1, 2, 3)', bubble: 'rgb(4, 5, 6)', edge: 'rgb(7, 8, 9)', page: 'rgb(10, 11, 12)' };
+const COLOR = {
+  avatar: 'rgb(1, 2, 3)',
+  bubble: 'rgb(4, 5, 6)',
+  edge: 'rgb(7, 8, 9)',
+  page: 'rgb(10, 11, 12)',
+};
 
 /** `en-GB` and an injected "now", so no assertion depends on the test clock. */
 const FIXED = { locale: 'en-GB', now: NOW } as const;

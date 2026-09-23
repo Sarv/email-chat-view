@@ -340,7 +340,7 @@ export function fitDocumentSurfaces(doc: Document | null | undefined): void {
 export function documentSurfaceCss(sheet: string): string {
   return [
     `.${PAPER_CLASS}{background-color:transparent!important;}`,
-    `.${TABLE_SHEET_CLASS} tr:not([bgcolor]):not([style*="background"])`
-      + `{background-color:${sheet};}`,
+    `.${TABLE_SHEET_CLASS} tr:not([bgcolor]):not([style*="background"])` +
+      `{background-color:${sheet};}`,
   ].join('');
 }
