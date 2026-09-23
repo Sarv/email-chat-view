@@ -406,6 +406,68 @@ describe('ChatBubble', () => {
     expect(container.querySelector('.sec-actions')?.textContent).toBe('star m1');
   });
 
+  // Regression: a per-message mark belongs on the metadata line the reader
+  // already reads to answer "who is this from, and when". Rendered under the
+  // body it reads as part of the message — which is how a shield that judges
+  // the mail comes to look like something the SENDER wrote.
+  it('renders the host’s header meta after the timestamp', () => {
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage()}
+        labels={DEFAULT_LABELS}
+        renderHeaderMeta={(each) => <i className="host-shield">shield {each.id}</i>}
+        {...FIXED}
+      />,
+    );
+    const head = container.querySelector('.sec-head') as HTMLElement;
+    const children = [...head.children];
+    expect(container.querySelector('.sec-head__meta .host-shield')?.textContent).toBe('shield m1');
+    // AFTER the time, not before it: the mark qualifies the header, it does
+    // not interrupt it.
+    expect(children.indexOf(head.querySelector('.sec-head__meta') as Element)).toBe(
+      children.indexOf(head.querySelector('.sec-head__time') as Element) + 1,
+    );
+  });
+
+  // Regression: a run follower drops its header because sender and time are
+  // INHERITED from the run's first bubble. A per-message judgement is not, so
+  // it still renders — in a row of its own. Drop it silently and a reader
+  // comes to believe every message in a run carried the mark the first one did.
+  it('keeps the header meta on a follow-up in a run', () => {
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage()}
+        compact
+        labels={DEFAULT_LABELS}
+        renderHeaderMeta={() => <i className="host-shield">shield</i>}
+        {...FIXED}
+      />,
+    );
+    const head = container.querySelector('.sec-head') as HTMLElement;
+    expect(head.className).toBe('sec-head sec-head--meta-only');
+    expect(head.querySelector('.host-shield')).not.toBeNull();
+    // Still no sender and no time — the row carries the mark and nothing else.
+    expect(head.querySelector('.sec-head__sender')).toBeNull();
+    expect(head.querySelector('.sec-head__time')).toBeNull();
+  });
+
+  // Regression: a host that has nothing to say about THIS message returns
+  // nothing, and must not get an empty wrapper for it — on a run follower that
+  // would be a blank row above the bubble, opening the gap the run closed.
+  it('renders no meta element when the host returns nothing', () => {
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage()}
+        compact
+        labels={DEFAULT_LABELS}
+        renderHeaderMeta={() => null}
+        {...FIXED}
+      />,
+    );
+    expect(container.querySelector('.sec-head')).toBeNull();
+    expect(container.querySelector('.sec-head__meta')).toBeNull();
+  });
+
   it('takes a class from its host', () => {
     const { container } = render(
       <ChatBubble

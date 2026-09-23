@@ -91,6 +91,12 @@ export interface MailChatViewProps {
   onDownloadAttachment?: (attachment: Attachment, message: ChatMessage) => void;
   /** Per-bubble controls at the outer edge: menus, star, an AI re-run. */
   renderActions?: (message: ChatMessage) => ReactNode;
+  /**
+   * Per-message marks beside the timestamp: a security shield, a verified tick.
+   * Renders on a run follower too, which has no header of its own — see
+   * {@link ChatBubbleProps.renderHeaderMeta}.
+   */
+  renderHeaderMeta?: (message: ChatMessage) => ReactNode;
   /** Per-bubble content below the body: a reply box, a translation notice. */
   renderFooter?: (message: ChatMessage) => ReactNode;
   /** Is there older history the host could fetch? */
@@ -126,6 +132,7 @@ export function MailChatView({
   onPreviewAttachment,
   onDownloadAttachment,
   renderActions,
+  renderHeaderMeta,
   renderFooter,
   hasOlder = false,
   onLoadOlder,
@@ -332,6 +339,7 @@ export function MailChatView({
                   onPreviewAttachment={onPreviewAttachment}
                   onDownloadAttachment={onDownloadAttachment}
                   renderActions={renderActions}
+                  renderHeaderMeta={renderHeaderMeta}
                   renderFooter={renderFooter}
                 />
               </div>

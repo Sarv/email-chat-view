@@ -360,6 +360,28 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Host-rendered marks beside the time — a shield, a verified tick, a label.
+   `align-self: center`, because the line is on a baseline and an icon has no
+   text baseline of its own: left to it, the glyph hangs below the timestamp
+   instead of sitting level with it. */
+.sec-head__meta {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex: 0 0 auto;
+  gap: var(--sec-gap-sm);
+  /* The mark stays legible against the muted metadata line: the host colours
+     its own icons, so inherit nothing that would tint them. */
+  line-height: 1;
+}
+
+/* A run follower has no header, only these marks. Nothing to sit beside, so
+   the row carries just enough height for the icon and none of the header's
+   own spacing. */
+.sec-head--meta-only {
+  padding-block-start: 2px;
+}
+
 /* -------------------------------------------------------------- bubble --- */
 
 .sec-bubble {

@@ -126,6 +126,19 @@ export interface ChatBubbleProps {
   /** Controls shown at the bubble's outer edge on hover: menus, star, retry. */
   renderActions?: (message: ChatMessage) => ReactNode;
   /**
+   * Per-message metadata beside the timestamp: a security shield, a verified
+   * mark, a label. The header is where a reader already looks to answer "who
+   * is this from, and when" — a mark that qualifies the answer belongs on that
+   * line, not under the body where it reads as part of the message.
+   *
+   * A follow-up in a sender run has no header, and this still renders: the
+   * bubble grows a meta-only row in its place. The header is dropped because
+   * sender and time are INHERITED from the run's first bubble; a per-message
+   * judgement is not, and silently dropping one is how a reader comes to
+   * believe every message in a run was vouched for.
+   */
+  renderHeaderMeta?: (message: ChatMessage) => ReactNode;
+  /**
    * Anything below the body, inside the bubble: a reply box, an AI notice.
    *
    * A bubble holding a designed mail carries no padding of its own — the
@@ -152,6 +165,7 @@ export function ChatBubble({
   onPreviewAttachment,
   onDownloadAttachment,
   renderActions,
+  renderHeaderMeta,
   renderFooter,
   className,
 }: ChatBubbleProps) {
@@ -181,6 +195,12 @@ export function ChatBubble({
   const senderLabel = displayNameFor(message.fromAddress, message.fromName);
   const recipientSummary = describeRecipients(recipients, resolvedLabels);
   const timestamp = bubbleTimestamp(message.date, message.dateApprox, resolvedLabels, locale, now);
+
+  // Wrapped by the library rather than by the host so the header can align it:
+  // `.sec-head` sits on a baseline, and an icon handed straight into that line
+  // hangs below the text it annotates.
+  const headerMeta = renderHeaderMeta?.(message);
+  const metaNode = headerMeta ? <span className="sec-head__meta">{headerMeta}</span> : null;
 
   const previewAttachment = useCallback(
     (attachment: Attachment) => onPreviewAttachment?.(attachment, message),
@@ -229,7 +249,9 @@ export function ChatBubble({
         spacer={compact}
       />
       <div className={`sec-col${hug ? ' sec-col--hug' : ''}`}>
-        {compact ? null : (
+        {compact ? (
+          metaNode && <div className="sec-head sec-head--meta-only">{metaNode}</div>
+        ) : (
           <div className="sec-head">
             <Tooltip
               className="sec-head__who"
@@ -265,6 +287,7 @@ export function ChatBubble({
                 {timestamp.text}
               </time>
             ) : null}
+            {metaNode}
           </div>
         )}
 

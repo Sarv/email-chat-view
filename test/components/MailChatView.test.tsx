@@ -131,6 +131,22 @@ describe('MailChatView', () => {
       const { container } = renderView({ messages: run, senderRunWindowMs: 0 });
       expect(container.querySelectorAll('.sec-head')).toHaveLength(2);
     });
+
+    // Regression: the header a run collapses carries sender and time, both
+    // inherited from the bubble above. A host's per-message mark — a security
+    // shield, a verified tick — is not inherited, so it has to reach EVERY
+    // bubble in the run. One mark on the first of three is how a reader learns
+    // to read the whole run as vouched for.
+    it('passes the host’s header meta to every bubble in a run', () => {
+      const { container } = renderView({
+        messages: run,
+        renderHeaderMeta: (message) => <i className="host-shield">{message.id}</i>,
+      });
+      expect([...container.querySelectorAll('.sec-head__meta')].map((m) => m.textContent)).toEqual([
+        'a',
+        'b',
+      ]);
+    });
   });
 
   describe('the DOM ceiling', () => {
