@@ -55,8 +55,10 @@ export type { CleanReplyBodyOptions, StripFamilyOptions } from './transform/stri
 export {
   ATTRIBUTION_LINE_SELECTORS,
   cleanFragment,
+  collapseBlankRuns,
   drawsLeftBorder,
   INDENT_BAR_SELECTOR,
+  MAX_BLANK_RUN,
   QUOTE_WRAPPER_SELECTORS,
   removeAttributionLines,
   removeEmptyBlocks,

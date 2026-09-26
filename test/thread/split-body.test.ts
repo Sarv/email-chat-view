@@ -111,6 +111,23 @@ describe('splitMailBody', () => {
     );
   });
 
+  // Regression: a first message typed in Outlook has no quote to split on, so it
+  // takes the structure-keeping path, where the blank-block pass is off. Every
+  // Enter the sender pressed reached the bubble as its own blank line, a wall
+  // of nothing between the greeting and the update.
+  it('caps a wall of blank lines in a body with no boundaries', () => {
+    const blank = '<p class="MsoNormal"><o:p>&nbsp;</o:p></p>';
+    const [segment] = splitMailBody(
+      '<div class="WordSection1"><p class="MsoNormal">Hi Sorabh,</p>' +
+        `${blank.repeat(7)}<p class="MsoNormal">Please find the latest update below.</p></div>`,
+      { parser },
+    );
+
+    expect(segment!.applied).toContain('collapse:blank-run');
+    expect(segment!.html.match(/<o:p>/g)).toHaveLength(2);
+    expect(segment!.html).toContain('Please find the latest update below.');
+  });
+
   // The minimal chain runs on bodies nobody proved are conversational, so a
   // misfire there must leave the original rather than an empty bubble.
   it('falls back to the original when the solo pass empties the body', () => {

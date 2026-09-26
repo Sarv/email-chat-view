@@ -37,7 +37,7 @@ import {
   trimEdgeEmpties,
   trimEmptyEdges,
 } from './html-space.js';
-import { safeQueryAll } from './node-utils.js';
+import { isElement, isIgnorableNode, safeQueryAll } from './node-utils.js';
 import { cutSignOff } from './sign-off.js';
 
 /**
@@ -160,6 +160,83 @@ export function removeEmptyBlocks(root: Element): number {
   return removed;
 }
 
+/**
+ * The most blank lines in a row a body keeps.
+ *
+ * Two is still spacing a person chose, such as the gap they leave above a
+ * signature. Three or more in a row is a wall, and a chat bubble draws it as a
+ * screen of nothing between two lines of text.
+ */
+export const MAX_BLANK_RUN = 2;
+
+/**
+ * The node before `block` that renders as something, or null when that is
+ * text.
+ *
+ * Whitespace and comments between two blocks render as nothing, so they do
+ * not break a run of blank lines. Visible text does, because it is the thing
+ * the blank lines were around.
+ */
+function previousRenderedSibling(block: Element): Element | null {
+  let previous = block.previousSibling;
+  while (previous && !isElement(previous)) {
+    // `isIgnorableNode`, not the node's text: a comment's `textContent` is its
+    // own source, which never renders, so reading it as text would let a
+    // stray `<!-- -->` split a wall into two runs short enough to survive.
+    if (!isIgnorableNode(previous)) return null;
+    previous = previous.previousSibling;
+  }
+  return previous;
+}
+
+/**
+ * Cut every run of blank blocks longer than {@link MAX_BLANK_RUN} down to that
+ * many. Returns the count removed.
+ *
+ * The case {@link removeEmptyBlocks} is not allowed to reach: a body that was
+ * never split keeps its structure, and the string-level
+ * {@link collapseExcessBlankSpace} spares two blank shapes on purpose. It
+ * spares a block carrying `style`, because in a template that is a spacer, and
+ * it cannot see through the inline tag Outlook puts inside an empty paragraph,
+ * `<p class="MsoNormal"><o:p>&nbsp;</o:p></p>`. Both are what the Enter key
+ * produces in Outlook, so a first message typed there reached the bubble with
+ * every blank line the sender pressed.
+ *
+ * Capping rather than removing is what keeps this safe on a designed body. A
+ * lone spacer and a deliberate double gap survive untouched. Only a run that
+ * already reads as a wall loses its tail.
+ */
+export function collapseBlankRuns(root: Element): number {
+  const blanks = safeQueryAll(root, 'p, div').filter(isEmptyElement);
+  const blankSet = new Set(blanks);
+  // A blank block inside a blank block renders as ONE line, so only the
+  // outermost of a nest is a line of the run. The nearest enclosing block is
+  // the only one worth asking about: every block inside a blank one is blank.
+  const lines = blanks.filter((block) => {
+    const enclosing = block.parentElement?.closest('p, div');
+    return !(enclosing && blankSet.has(enclosing));
+  });
+
+  let removed = 0;
+  let run: Element[] = [];
+  const cutRun = () => {
+    for (const extra of run.slice(MAX_BLANK_RUN)) {
+      extra.remove();
+      removed += 1;
+    }
+  };
+  for (const line of lines) {
+    if (run.length > 0 && previousRenderedSibling(line) === run[run.length - 1]) {
+      run.push(line);
+      continue;
+    }
+    cutRun();
+    run = [line];
+  }
+  cutRun();
+  return removed;
+}
+
 /** Rule sets and switches for {@link cleanFragment}. */
 export interface CleanFragmentOptions {
   signatureRules?: readonly DomRule[];
@@ -169,8 +246,9 @@ export interface CleanFragmentOptions {
   keepSignOff?: boolean;
   /**
    * Leave the document's STRUCTURE untouched: no unwrapping, no attribution
-   * removal, no internal blank-block removal. Only the marker-driven rules and
-   * the edge trim run.
+   * removal, no internal blank-block removal. Only the marker-driven rules, the
+   * edge trim and the cap on long runs of blank lines (see
+   * {@link collapseBlankRuns}) run.
    *
    * Set this for a body that was never split — a standalone email with no
    * quoted history inside it. The whole body IS the one message, so there is no
@@ -218,7 +296,14 @@ export function cleanFragment(root: Element, options?: CleanFragmentOptions): St
   }
   if (!options?.keepSignOff && cutSignOff(root)) applied.push('sign-off');
 
-  if (!options?.keepStructure && removeEmptyBlocks(root)) applied.push('remove:empty-block');
+  if (!options?.keepStructure) {
+    if (removeEmptyBlocks(root)) applied.push('remove:empty-block');
+  } else if (collapseBlankRuns(root)) {
+    // The structure-keeping body still loses a WALL of blank lines, only never
+    // the lone spacer or the double gap. A split segment needs no cap: the
+    // pass above has already removed every blank block in it.
+    applied.push('collapse:blank-run');
+  }
   trimEdgeEmpties(root);
 
   return { html: collapseExcessBlankSpace(trimEmptyEdges(root.innerHTML)), applied };

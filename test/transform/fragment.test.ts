@@ -4,7 +4,9 @@ import type { DomRule, LineRule } from '../../src/rules/types.js';
 import {
   ATTRIBUTION_LINE_SELECTORS,
   cleanFragment,
+  collapseBlankRuns,
   drawsLeftBorder,
+  MAX_BLANK_RUN,
   removeAttributionLines,
   removeEmptyBlocks,
   unwrapElement,
@@ -147,6 +149,128 @@ describe('removeEmptyBlocks', () => {
   });
 });
 
+describe('collapseBlankRuns', () => {
+  /** `count` copies of one blank line, the way a sender pressed Enter. */
+  const lines = (line: string, count: number) => Array.from({ length: count }, () => line).join('');
+  /** Markup as the parser writes it back, `&nbsp;` as `&#160;` included. */
+  const serialized = (html: string) => squash(parseBody(html).innerHTML);
+
+  // Regression: Outlook's Enter key writes `<p class="MsoNormal"><o:p>&nbsp;
+  // </o:p></p>`, which the string-level collapse cannot see through. A first
+  // message typed there reached the bubble with every blank line the sender
+  // pressed, a screen of nothing between two sentences.
+  it('cuts a wall of Outlook blank paragraphs down to two lines', () => {
+    const blank = '<p class="MsoNormal"><o:p>&nbsp;</o:p></p>';
+    const body = parseBody(
+      `<p class="MsoNormal">Hi Sorabh,</p>${lines(blank, 6)}<p class="MsoNormal">Update below.</p>`,
+    );
+
+    expect(collapseBlankRuns(body)).toBe(4);
+    expect(squash(body.innerHTML)).toBe(
+      serialized(
+        `<p class="MsoNormal">Hi Sorabh,</p>${lines(blank, MAX_BLANK_RUN)}` +
+          '<p class="MsoNormal">Update below.</p>',
+      ),
+    );
+  });
+
+  // Regression: the string-level collapse spares a block carrying `style`,
+  // which is also what Outlook writes for a blank line: `<p style="margin:0">
+  // <br></p>`.
+  it('cuts a wall of styled blank paragraphs down to two lines', () => {
+    const blank = '<p style="margin:0"><br></p>';
+    const body = parseBody(`<p style="margin:0">first</p>${lines(blank, 5)}<p>second</p>`);
+
+    expect(collapseBlankRuns(body)).toBe(3);
+    expect(squash(body.innerHTML)).toBe(
+      `<p style="margin:0">first</p>${lines(blank, 2)}<p>second</p>`,
+    );
+  });
+
+  // Regression: a cap, not a removal. Two blank lines are spacing a person
+  // chose, and a template's lone spacer is its layout.
+  it('leaves a lone spacer and a double gap exactly as written', () => {
+    const source =
+      '<p>first</p><div style="height:24px">&nbsp;</div><p>second</p>' +
+      '<p><br></p><p><br></p><p>third</p>';
+    const body = parseBody(source);
+
+    expect(collapseBlankRuns(body)).toBe(0);
+    expect(squash(body.innerHTML)).toBe(serialized(source));
+  });
+
+  // Regression: text between blank lines is what they were spacing out, so it
+  // ends one run and starts the next. Two runs of two are not one run of four.
+  it('treats visible text as the end of a run', () => {
+    const source = '<p><br></p><p><br></p>words<p><br></p><p><br></p>';
+    const body = parseBody(source);
+
+    expect(collapseBlankRuns(body)).toBe(0);
+    expect(squash(body.innerHTML)).toBe(source);
+  });
+
+  // Whitespace and comments between two blocks render as nothing, so they
+  // must not split a wall into runs short enough to survive.
+  it('reads through whitespace and comments between blank lines', () => {
+    const body = parseBody('<p>first</p>\n<p><br></p>\n<!-- x -->\n<p><br></p>\n<p><br></p>\n');
+
+    expect(collapseBlankRuns(body)).toBe(1);
+    expect(squash(body.innerHTML)).toBe('<p>first</p> <p><br></p> <!-- x --> <p><br></p>');
+  });
+
+  // A blank paragraph inside a blank wrapper renders as ONE line. Counting both
+  // would cap a run of two wrapped lines as though it were four.
+  it('counts a nest of blank blocks as one line', () => {
+    const wrapped = '<div><p>&nbsp;</p></div>';
+    const body = parseBody(`${lines(wrapped, 2)}<p>words</p>${lines(wrapped, 3)}`);
+
+    expect(collapseBlankRuns(body)).toBe(1);
+    expect(squash(body.innerHTML)).toBe(
+      serialized(`${lines(wrapped, 2)}<p>words</p>${lines(wrapped, 2)}`),
+    );
+  });
+
+  // Regression: an image-only paragraph is content. Treating it as blank would
+  // delete somebody's screenshot as the tail of a run.
+  it('never counts a block with media in it as blank', () => {
+    const blank = '<p><br></p>';
+    const source = `${lines(blank, 2)}<p><img src="cid:shot"></p>${lines(blank, 2)}`;
+    const body = parseBody(source);
+
+    expect(collapseBlankRuns(body)).toBe(0);
+    expect(squash(body.innerHTML)).toBe(source);
+  });
+
+  // Blank lines inside a table cell are the cell's own spacing, and a cell is
+  // a separate run from the lines outside the table.
+  it('caps runs inside a container independently of the lines around it', () => {
+    const blank = '<p><br></p>';
+    const body = parseBody(
+      `<table><tbody><tr><td>${lines(blank, 3)}</td></tr></tbody></table>${lines(blank, 3)}`,
+    );
+
+    expect(collapseBlankRuns(body)).toBe(2);
+    expect(squash(body.innerHTML)).toBe(
+      `<table><tbody><tr><td>${lines(blank, 2)}</td></tr></tbody></table>${lines(blank, 2)}`,
+    );
+  });
+
+  // A run that ends the body is still a run. The trailing edge trim removes it
+  // later in `cleanFragment`, but the cap must not depend on that.
+  it('caps a run that ends the body', () => {
+    const body = parseBody(`<p>words</p>${lines('<div><br></div>', 4)}`);
+
+    expect(collapseBlankRuns(body)).toBe(2);
+    expect(squash(body.innerHTML)).toBe(`<p>words</p>${lines('<div><br></div>', 2)}`);
+  });
+
+  it('has nothing to do in a body with no blank lines', () => {
+    const body = parseBody('<p>first</p><p>second</p>');
+
+    expect(collapseBlankRuns(body)).toBe(0);
+  });
+});
+
 describe('cleanFragment', () => {
   /** Clean a fragment and report what came back. */
   function clean(html: string, options?: Parameters<typeof cleanFragment>[1]) {
@@ -231,6 +355,35 @@ describe('cleanFragment', () => {
         '<blockquote style="border-left:2px solid #ccc"><p>the designed content</p></blockquote>',
     );
     expect(applied).toEqual([]);
+  });
+
+  // Regression: a body that was never split keeps its structure, so the
+  // blank-block pass is off. A wall of Outlook blank lines must still be capped,
+  // and the audit trail must say that is what happened.
+  it('caps a wall of blank lines under keepStructure and reports it', () => {
+    const blank = '<p class="MsoNormal"><o:p>&nbsp;</o:p></p>';
+    const { html, applied } = clean(
+      `<p class="MsoNormal">Hi Sorabh,</p>${blank.repeat(6)}<p class="MsoNormal">Update below.</p>`,
+      { keepStructure: true },
+    );
+
+    expect(html).toBe(
+      squash(
+        parseBody(
+          `<p class="MsoNormal">Hi Sorabh,</p>${blank.repeat(2)}<p class="MsoNormal">Update below.</p>`,
+        ).innerHTML,
+      ),
+    );
+    expect(applied).toEqual(['collapse:blank-run']);
+  });
+
+  // A split segment has every blank block removed already, so the cap has
+  // nothing left to do there and must not claim it did.
+  it('reports only the blank-block pass for a split segment', () => {
+    const { html, applied } = clean(`<p>first</p>${'<p><br></p>'.repeat(4)}<p>second</p>`);
+
+    expect(html).toBe('<p>first</p><p>second</p>');
+    expect(applied).toEqual(['remove:empty-block']);
   });
 
   it('drops the blank blocks a sender stacked between lines', () => {
