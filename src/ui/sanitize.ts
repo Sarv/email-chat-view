@@ -95,12 +95,68 @@ const INLINE_CONFIG: Record<string, unknown> = {
   FORBID_ATTR: ['style', 'class', 'id', 'target'],
 };
 
+/**
+ * Attributes the frame keeps whatever their value, because none of them is
+ * ever a URL.
+ *
+ * DOMPurify checks `ALLOWED_URI_REGEXP` against EVERY attribute it does not
+ * already know to be URL-free, not only `href` and `src`. Its own default
+ * pattern lets a value with no scheme through, so `width="64"` passes. The
+ * frame's pattern cannot do that, because it lists schemes. A value with no
+ * scheme is exactly how a protocol-relative `//host/path` link would get past
+ * it, and such a link resolves against the host application's own base URL.
+ * So the pattern stays strict for the attributes that really are URLs, and
+ * this list names the ones that are not.
+ *
+ * Without the list every one of these is stripped, which is how a Google
+ * Sheets range pasted into Gmail used to arrive. The sheet declares
+ * `table-layout:fixed;width:0px` and sizes its columns ONLY through
+ * `<col width>`. With those attributes gone, the table collapsed to one pixel
+ * wide, every row grew thousands of pixels tall, and the bubble read as a
+ * screen of blank lines. `colspan`, `rowspan`, `align`, `valign`, `bgcolor`,
+ * `cellpadding` and `dir` were lost the same way. `hidden` belongs here too:
+ * dropping it SHOWS what the sender hid.
+ *
+ * Every name is already on DOMPurify's default allowlist, which the tests
+ * check. This list only stops the scheme test from vetoing them.
+ */
+export const FRAME_URI_SAFE_ATTR = [
+  'align',
+  'bgcolor',
+  'border',
+  'cellpadding',
+  'cellspacing',
+  'clear',
+  'color',
+  'colspan',
+  'dir',
+  'face',
+  'headers',
+  'height',
+  'hidden',
+  'lang',
+  'noshade',
+  'nowrap',
+  'reversed',
+  'rowspan',
+  'scope',
+  'size',
+  'span',
+  'start',
+  'type',
+  'valign',
+  'width',
+];
+
 const FRAME_CONFIG: Record<string, unknown> = {
   // The frame's whole purpose is that the sender's layout survives, so this is
   // a denylist: DOMPurify's defaults keep presentational markup (`style`
   // attributes, `<table>`, `<style>`) and strip the executable surface.
   ADD_TAGS: ['style'],
   ALLOWED_URI_REGEXP: /^(?:https?|mailto|cid|data):/i,
+  // Without this the pattern above also vetoes `width`, `colspan` and the rest
+  // of the layout attributes. See the list's own note.
+  ADD_URI_SAFE_ATTR: FRAME_URI_SAFE_ATTR,
   ALLOW_UNKNOWN_PROTOCOLS: false,
   ALLOW_DATA_ATTR: false,
   FORBID_TAGS: [

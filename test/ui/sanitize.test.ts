@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canSanitize,
+  FRAME_URI_SAFE_ATTR,
   sanitizeFrameHtml,
   sanitizeInlineHtml,
   type Purifier,
@@ -112,6 +113,96 @@ describe('sanitizeFrameHtml', () => {
   it('keeps the message’s own inline images', () => {
     expect(sanitizeFrameHtml('<img src="cid:logo@1">')).toContain('cid:logo@1');
     expect(sanitizeFrameHtml('<img src="data:image/gif;base64,R0lGOD">')).toContain('data:image');
+  });
+
+  // Regression: DOMPurify runs the scheme pattern over every attribute it does
+  // not know to be URL-free, so `width="64"` failed it and was dropped. A Google
+  // Sheets range pasted into Gmail sizes its columns ONLY through `<col width>`
+  // under `table-layout:fixed;width:0px`, and without them it collapsed to one
+  // pixel wide: a bubble that read as a screen of blank lines.
+  it('keeps the column widths a pasted spreadsheet is sized by', () => {
+    const clean = sanitizeFrameHtml(
+      '<table cellspacing="0" cellpadding="0" dir="ltr" border="1" ' +
+        'style="table-layout:fixed;width:0px;border-collapse:collapse">' +
+        '<colgroup><col width="64"><col width="215"></colgroup>' +
+        '<tbody><tr><td>SL NO</td><td>Description</td></tr></tbody></table>',
+    );
+    expect(clean).toContain('<col width="64"><col width="215">');
+    expect(clean).toContain('cellspacing="0"');
+    expect(clean).toContain('cellpadding="0"');
+    expect(clean).toContain('dir="ltr"');
+    expect(clean).toContain('border="1"');
+    expect(clean).toContain('style="table-layout:fixed;width:0px;border-collapse:collapse"');
+  });
+
+  // Regression: merged cells, alignment and cell colours were lost the same
+  // way. Without `colspan` a report's merged header shifts every column under
+  // it, and without `bgcolor` the frame's own cell wash has nothing to soften.
+  it('keeps the table structure and cell presentation', () => {
+    const clean = sanitizeFrameHtml(
+      '<table><tbody><tr><td colspan="2" rowspan="3" align="center" valign="top" ' +
+        'width="50%" height="20" bgcolor="#c6e0b4" nowrap="nowrap">Total</td></tr></tbody></table>',
+    );
+    expect(clean).toContain(
+      '<td colspan="2" rowspan="3" align="center" valign="top" width="50%" height="20" ' +
+        'bgcolor="#c6e0b4" nowrap="nowrap">Total</td>',
+    );
+  });
+
+  // Regression: `dir` is what lays out Arabic and Hebrew mail right to left,
+  // and `<font>` is how older clients still colour their text.
+  it('keeps text direction, language and legacy font attributes', () => {
+    expect(sanitizeFrameHtml('<p dir="rtl" lang="ar">مرحبا</p>')).toBe(
+      '<p dir="rtl" lang="ar">مرحبا</p>',
+    );
+    expect(sanitizeFrameHtml('<font color="#1f497d" face="Calibri" size="2">Hi</font>')).toBe(
+      '<font color="#1f497d" face="Calibri" size="2">Hi</font>',
+    );
+  });
+
+  // Regression: dropping `hidden` SHOWS what the sender hid, such as a
+  // preheader written for the inbox list and never meant for the body.
+  it('keeps content hidden when the sender hid it', () => {
+    expect(sanitizeFrameHtml('<div hidden="hidden">preheader</div>')).toBe(
+      '<div hidden="hidden">preheader</div>',
+    );
+  });
+
+  // Guards the list itself. A name DOMPurify does not allow is stripped
+  // whatever this list says, so an entry that fails here protects nothing.
+  it.each(FRAME_URI_SAFE_ATTR)('keeps %s, which is on DOMPurify’s own allowlist', (name) => {
+    const clean = sanitizeFrameHtml(
+      `<table><tbody><tr><td ${name}="layout-value">x</td></tr></tbody></table>`,
+    );
+    expect(clean).toContain(`${name}="layout-value"`);
+  });
+
+  // Regression: exempting the layout attributes must not loosen the ones that
+  // ARE URLs. A protocol-relative or relative link resolves against the host
+  // application's own base URL, so only the listed schemes may survive.
+  it('still checks the scheme of every attribute that is a URL', () => {
+    expect(sanitizeFrameHtml('<a href="javascript:alert(1)">x</a>')).toBe('<a>x</a>');
+    expect(sanitizeFrameHtml('<a href="//evil.example/login">x</a>')).toBe('<a>x</a>');
+    expect(sanitizeFrameHtml('<a href="/login">x</a>')).toBe('<a>x</a>');
+    expect(sanitizeFrameHtml('<img src="//evil.example/pixel.gif">')).toBe('<img>');
+    expect(
+      sanitizeFrameHtml(
+        '<table><tbody><tr><td background="javascript:alert(1)">x</td></tr></tbody></table>',
+      ),
+    ).toBe('<table><tbody><tr><td>x</td></tr></tbody></table>');
+    expect(sanitizeFrameHtml('<a href="https://x.example">x</a>')).toBe(
+      '<a href="https://x.example">x</a>',
+    );
+  });
+
+  // Regression: an exempted attribute is never a way in. The exemption skips
+  // only the scheme test, so event handlers on the same element still go.
+  it('still removes event handlers beside the layout attributes', () => {
+    expect(
+      sanitizeFrameHtml(
+        '<table><tbody><tr><td width="64" onclick="steal()">x</td></tr></tbody></table>',
+      ),
+    ).toBe('<table><tbody><tr><td width="64">x</td></tr></tbody></table>');
   });
 
   it('removes the executable and navigational surface', () => {

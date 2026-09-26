@@ -213,6 +213,27 @@ describe('SandboxedBody', () => {
     expect(doc.clickListeners).toHaveLength(1);
   });
 
+  // Regression: the frame is where a body is sanitized, so this is where a
+  // layout attribute is kept or lost. A Google Sheets range pasted into Gmail
+  // lost its `<col width>` here and collapsed to one pixel wide, with every
+  // row thousands of pixels tall: a bubble of blank space under "Please find
+  // the latest update below".
+  it('hands the frame a pasted spreadsheet with its column widths intact', () => {
+    const { container } = render(
+      <SandboxedBody
+        html={
+          '<table style="table-layout:fixed;width:0px"><colgroup><col width="64">' +
+          '<col width="215"></colgroup><tbody><tr><td colspan="2">Defects</td></tr>' +
+          '</tbody></table>'
+        }
+        labels={DEFAULT_LABELS}
+      />,
+    );
+    const srcdoc = frameOf(container).getAttribute('srcdoc');
+    expect(srcdoc).toContain('<col width="64"><col width="215">');
+    expect(srcdoc).toContain('<td colspan="2">Defects</td>');
+  });
+
   describe('remote images', () => {
     // Regression: the tracking-pixel protection is a CSP policy inside the
     // frame, not a rewriting pass over `src` attributes — so the proof is in
