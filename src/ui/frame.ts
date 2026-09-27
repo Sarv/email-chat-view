@@ -44,6 +44,18 @@ export interface FrameTheme {
    * it. Unlike {@link FrameTheme.wash} this one is MEANT to be opaque.
    */
   sheet: string;
+  /**
+   * The `color-scheme` the frame's `<iframe>` element is drawn in, copied from
+   * the host so the document inside declares the same one.
+   *
+   * Not cosmetic. When an iframe element's used scheme differs from its
+   * document's, Chromium paints the frame an OPAQUE backdrop in the document's
+   * scheme instead of leaving it transparent. A document that declares no
+   * scheme is light, so in a dark host every part of a message that paints
+   * nothing — beside a table, under a short body — came through as a white
+   * slab. Optional, so a theme built without it keeps the old behaviour.
+   */
+  colorScheme?: string;
 }
 
 /**
@@ -74,8 +86,8 @@ export const FALLBACK_FRAME_THEME: FrameTheme = {
   sheet: 'Canvas',
 };
 
-/** The `--sec-*` token backing each theme slot. */
-const THEME_TOKENS: Record<keyof FrameTheme, string> = {
+/** The `--sec-*` token backing each theme slot. `colorScheme` is a real property, read on its own. */
+const THEME_TOKENS: Record<Exclude<keyof FrameTheme, 'colorScheme'>, string> = {
   ink: '--sec-ink',
   muted: '--sec-muted',
   border: '--sec-border',
@@ -99,12 +111,17 @@ export function readFrameTheme(element: Element | null | undefined): FrameTheme 
   const view = element?.ownerDocument?.defaultView;
   if (!element || !view) return FALLBACK_FRAME_THEME;
   const computed = view.getComputedStyle(element);
-  const entries = Object.entries(THEME_TOKENS) as [keyof FrameTheme, string][];
-  const theme = { ...FALLBACK_FRAME_THEME };
+  const entries = Object.entries(THEME_TOKENS) as [keyof typeof THEME_TOKENS, string][];
+  const theme: FrameTheme = { ...FALLBACK_FRAME_THEME };
   for (const [slot, token] of entries) {
     const value = computed.getPropertyValue(token).trim();
     if (value) theme[slot] = value;
   }
+  // Read off the host because the `<iframe>` inherits it from there; a
+  // consumer that styles `.sec-frame` with a different scheme must style the
+  // host instead, or the two disagree again.
+  const colorScheme = computed.getPropertyValue('color-scheme').trim();
+  if (colorScheme) theme.colorScheme = colorScheme;
   return theme;
 }
 
@@ -131,6 +148,9 @@ export function buildFrameCss(theme: FrameTheme): string {
   // newsletter that sets its own font must win, or the frame stops being a
   // faithful rendering of the mail and starts being an opinion about it.
   return [
+    // First, so it is in force before anything that resolves a system colour.
+    // See `FrameTheme.colorScheme` for why a mismatch paints a white slab.
+    theme.colorScheme ? `:root{color-scheme:${theme.colorScheme};}` : '',
     'html,body{margin:0;padding:0;background:transparent;}',
     `body{color:${theme.ink};font-family:${theme.font};font-size:${theme.fontSize};`,
     `line-height:${theme.lineHeight};overflow-wrap:anywhere;}`,

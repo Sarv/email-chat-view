@@ -119,6 +119,24 @@ describe('readFrameTheme', () => {
   });
 });
 
+describe('readFrameTheme colour scheme', () => {
+  // Regression: a frame document that declares no scheme is light, and an
+  // iframe element drawn dark around a light document gets an OPAQUE white
+  // backdrop from Chromium — the white slab beside a table in a dark mail.
+  // The frame can only agree with its element if the host's scheme is read.
+  it('copies the host’s colour scheme in', () => {
+    expect(readFrameTheme(elementWithTokens({ 'color-scheme': ' dark ' })).colorScheme).toBe(
+      'dark',
+    );
+  });
+
+  // Regression: a host with nothing to say must not get `color-scheme:` with
+  // an empty value written into its frame — leave the slot out entirely.
+  it('leaves the scheme out when the host reports none', () => {
+    expect(readFrameTheme(elementWithTokens({}))).not.toHaveProperty('colorScheme');
+  });
+});
+
 describe('buildFrameCss', () => {
   const theme: FrameTheme = {
     ink: '#101010',
@@ -135,6 +153,20 @@ describe('buildFrameCss', () => {
   it('writes every slot of the theme into the stylesheet', () => {
     const css = buildFrameCss(theme);
     for (const value of Object.values(theme)) expect(css).toContain(value);
+  });
+
+  // Regression: the scheme has to be declared INSIDE the frame document to
+  // match the iframe element — first, before any system colour resolves.
+  it('declares the host’s colour scheme on the frame’s root first', () => {
+    expect(buildFrameCss({ ...theme, colorScheme: 'dark' })).toMatch(
+      /^:root\{color-scheme:dark;\}/,
+    );
+  });
+
+  // Regression: a theme built without a scheme (a consumer's own FrameTheme)
+  // must keep producing the frame it always did, not an empty declaration.
+  it('declares no scheme when the theme carries none', () => {
+    expect(buildFrameCss(theme)).not.toContain('color-scheme');
   });
 
   // CHANGED BEHAVIOUR (was: 'never uses !important', then the cell wash alone,
