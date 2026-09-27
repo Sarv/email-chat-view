@@ -126,6 +126,18 @@ export function readFrameTheme(element: Element | null | undefined): FrameTheme 
 }
 
 /**
+ * Whether two themes would build the same frame.
+ *
+ * The host re-reads its theme whenever the page's theme might have changed,
+ * and most of those reads find nothing new; handing back the old object then
+ * is what keeps the frame from reloading its document for nothing.
+ */
+export function sameFrameTheme(first: FrameTheme, second: FrameTheme): boolean {
+  const slots = new Set([...Object.keys(first), ...Object.keys(second)]) as Set<keyof FrameTheme>;
+  return [...slots].every((slot) => first[slot] === second[slot]);
+}
+
+/**
  * Cells carrying a colour the SENDER chose — the ones whose background is
  * softened, and whose text colour has to follow it.
  *

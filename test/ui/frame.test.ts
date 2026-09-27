@@ -8,6 +8,7 @@ import {
   FALLBACK_FRAME_THEME,
   measureFrameHeight,
   readFrameTheme,
+  sameFrameTheme,
   type FrameTheme,
 } from '../../src/ui/frame.js';
 import { WIDE_TABLE_CSS } from '../../src/ui/wide-tables.js';
@@ -134,6 +135,26 @@ describe('readFrameTheme colour scheme', () => {
   // an empty value written into its frame — leave the slot out entirely.
   it('leaves the scheme out when the host reports none', () => {
     expect(readFrameTheme(elementWithTokens({}))).not.toHaveProperty('colorScheme');
+  });
+});
+
+describe('sameFrameTheme', () => {
+  const base = readFrameTheme(
+    elementWithTokens({ '--sec-ink': '#101010', 'color-scheme': 'dark' }),
+  );
+
+  // Regression: the host re-reads its theme on every page-attribute change;
+  // treating an identical read as new reloads every frame in the thread.
+  it('says an identical read is the same theme', () => {
+    expect(sameFrameTheme(base, { ...base })).toBe(true);
+  });
+
+  // Regression: missing a changed colour (or a scheme that appeared) leaves the
+  // frame in the theme it was opened in — dark rows on a page turned light.
+  it('notices a changed colour and a scheme that came or went', () => {
+    expect(sameFrameTheme(base, { ...base, ink: '#ffffff' })).toBe(false);
+    expect(sameFrameTheme(base, { ...base, colorScheme: 'light' })).toBe(false);
+    expect(sameFrameTheme(FALLBACK_FRAME_THEME, base)).toBe(false);
   });
 });
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SandboxedBody } from '../../src/components/SandboxedBody.js';
@@ -232,6 +232,83 @@ describe('SandboxedBody', () => {
     const srcdoc = frameOf(container).getAttribute('srcdoc');
     expect(srcdoc).toContain('<col width="64"><col width="215">');
     expect(srcdoc).toContain('<td colspan="2">Defects</td>');
+  });
+
+  describe('the host theme', () => {
+    /** Make every computed style report these values, whatever the element. */
+    const reportStyle = (values: Record<string, string>) => {
+      const real = window.getComputedStyle.bind(window);
+      return vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
+        const style = real(element);
+        return {
+          ...style,
+          getPropertyValue: (name: string) => values[name] ?? style.getPropertyValue(name),
+        } as CSSStyleDeclaration;
+      });
+    };
+
+    /** Switch a class on <html> and let the observer's re-read land. */
+    const setRootClass = async (className: string) => {
+      await act(async () => {
+        document.documentElement.className = className;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+
+    afterEach(async () => {
+      // Inside act: the frame is still mounted and hears this change too.
+      await setRootClass('');
+      vi.restoreAllMocks();
+    });
+
+    // Regression: the frame document must declare the scheme its iframe
+    // element inherits. A dark host around an undeclared (light) document is
+    // painted an opaque white backdrop — the slab beside a table in dark mode.
+    it('hands the frame the host’s colour scheme', () => {
+      reportStyle({ 'color-scheme': 'dark' });
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      expect(frameOf(container).getAttribute('srcdoc')).toContain(':root{color-scheme:dark;}');
+    });
+
+    // Regression: the theme was read once, on mount, so switching the app's
+    // theme left every open frame in the old colours — dark table rows inside
+    // a page that had just turned light.
+    it('rebuilds the frame when the page switches theme', async () => {
+      const style = { '--sec-ink': 'rgb(1, 1, 1)' };
+      reportStyle(style);
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      expect(frameOf(container).getAttribute('srcdoc')).toContain('rgb(1, 1, 1)');
+      style['--sec-ink'] = 'rgb(2, 2, 2)';
+      await setRootClass('dark');
+      expect(frameOf(container).getAttribute('srcdoc')).toContain('rgb(2, 2, 2)');
+    });
+
+    // Regression: a host that re-colours bodies for its dark mode restyles the
+    // bubble in the same render as the new body, with no page attribute
+    // changing — the new body must be framed with the new colours.
+    it('re-reads the theme when the body changes', () => {
+      const style = { '--sec-ink': 'rgb(1, 1, 1)' };
+      reportStyle(style);
+      const { container, rerender } = render(
+        <SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />,
+      );
+      style['--sec-ink'] = 'rgb(3, 3, 3)';
+      rerender(<SandboxedBody html="<p>hello</p>" labels={DEFAULT_LABELS} />);
+      expect(frameOf(container).getAttribute('srcdoc')).toContain('rgb(3, 3, 3)');
+    });
+
+    // Regression: most page-attribute changes are not theme changes; one that
+    // handed the frame a different document would reload and re-measure every
+    // frame in the thread.
+    it('leaves the frame alone when nothing in the theme moved', async () => {
+      reportStyle({ '--sec-ink': 'rgb(1, 1, 1)' });
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      const frame = frameOf(container);
+      const before = frame.getAttribute('srcdoc');
+      await setRootClass('unrelated');
+      expect(frameOf(container)).toBe(frame);
+      expect(frame.getAttribute('srcdoc')).toBe(before);
+    });
   });
 
   describe('remote images', () => {

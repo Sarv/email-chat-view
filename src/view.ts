@@ -105,7 +105,9 @@ export {
   FALLBACK_FRAME_THEME,
   measureFrameHeight,
   readFrameTheme,
+  sameFrameTheme,
 } from './ui/frame.js';
+export { watchHostTheme } from './ui/theme-watch.js';
 export type { FrameDocumentOptions, FrameTheme } from './ui/frame.js';
 // Exported because a host that renders message bodies in its OWN frame (the
 // standard, non-chat reading pane) has exactly the same problem and should not

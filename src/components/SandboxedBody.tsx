@@ -24,11 +24,13 @@ import {
   estimateFrameHeight,
   measureFrameHeight,
   readFrameTheme,
+  sameFrameTheme,
   type FrameTheme,
 } from '../ui/frame.js';
 import type { ViewLabels } from '../ui/labels.js';
 import { sanitizeFrameHtml } from '../ui/sanitize.js';
 import { fitDocumentSurfaces } from '../ui/surfaces.js';
+import { watchHostTheme } from '../ui/theme-watch.js';
 import { fitWideTables } from '../ui/wide-tables.js';
 
 import { ImageOffIcon } from './icons.js';
@@ -64,12 +66,25 @@ export function SandboxedBody({
   const sanitized = useMemo(() => sanitizeFrameHtml(html), [html]);
 
   // The frame inherits nothing from the page, so the host's tokens have to be
-  // read out of the cascade and copied in. Done once, before the frame is
-  // rendered at all: building the document with fallback colours first and the
-  // real ones a tick later would load the frame twice per message.
-  useEffect(() => {
-    setTheme(readFrameTheme(hostRef.current));
+  // read out of the cascade and copied in. Read before the frame is rendered at
+  // all: building the document with fallback colours first and the real ones a
+  // tick later would load the frame twice per message.
+  //
+  // And read AGAIN whenever the page's theme may have changed, and whenever the
+  // body does (a host that re-colours bodies for its dark mode restyles the
+  // bubble around them in the same render). Reading once left a frame on screen
+  // in the theme it was opened in. An unchanged read keeps the old object, so
+  // the frame only reloads when a colour really moved.
+  const refreshTheme = useCallback(() => {
+    const next = readFrameTheme(hostRef.current);
+    setTheme((current) => (current && sameFrameTheme(current, next) ? current : next));
   }, []);
+
+  useEffect(() => {
+    refreshTheme();
+  }, [refreshTheme, html]);
+
+  useEffect(() => watchHostTheme(hostRef.current, refreshTheme), [refreshTheme]);
 
   const srcDoc = useMemo(
     () =>
