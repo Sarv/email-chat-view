@@ -16,6 +16,7 @@ import type { ChatMessage } from '../types.js';
 import type { BodyShape } from '../ui/body-shape.js';
 import { clickedHref } from '../ui/frame.js';
 import type { ViewLabels } from '../ui/labels.js';
+import type { MessageMenuRequest } from '../ui/message-menu.js';
 import { sanitizeInlineHtml } from '../ui/sanitize.js';
 
 import { AlertTriangleIcon, SpinnerIcon } from './icons.js';
@@ -30,6 +31,13 @@ export interface MessageBodyProps {
   onOpenLink?: (url: string) => void;
   /** Offered on a permanently failed body. Omit and no retry appears. */
   onRetryBody?: (message: ChatMessage) => void;
+  /**
+   * A right-click inside a FRAMED body — see `SandboxedBodyProps.onFrameMenu`.
+   * An inline body is part of the host's own DOM, so its right-click reaches
+   * an ancestor's `onContextMenu` like any other element's; `ChatBubble`
+   * listens there.
+   */
+  onFrameMenu?: (request: MessageMenuRequest) => boolean | void;
 }
 
 export function MessageBody({
@@ -39,6 +47,7 @@ export function MessageBody({
   blockRemoteImages,
   onOpenLink,
   onRetryBody,
+  onFrameMenu,
 }: MessageBodyProps) {
   const inlineHtml = useMemo(
     // `shape.html`, never `message.body`: the shape carries the body with its
@@ -94,6 +103,7 @@ export function MessageBody({
         blockRemoteImages={blockRemoteImages}
         hasRemoteImages={shape.hasRemoteImages}
         onOpenLink={onOpenLink}
+        onFrameMenu={onFrameMenu}
       />
     );
   }

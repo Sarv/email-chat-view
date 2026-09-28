@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MessageBody } from '../../src/components/MessageBody.js';
 import { inspectBody, type BodyShape } from '../../src/ui/body-shape.js';
 import { DEFAULT_LABELS } from '../../src/ui/labels.js';
+import { loadedFrameDocument, rightClick } from '../helpers/frames.js';
 import { chatMessage } from '../helpers/messages.js';
 
 /**
@@ -126,6 +127,35 @@ describe('MessageBody', () => {
     );
     expect(container.querySelector('.sec-note--quiet')).not.toBeNull();
     expect(container.innerHTML).not.toContain('steal()');
+  });
+
+  describe('right-clicks', () => {
+    // Regression: a framed body's right-click is only visible to the frame
+    // itself — its document is separate, so nothing reaches an ancestor. Drop
+    // the callback on the way down and a designed mail has no menu at all.
+    it('hands the frame the host’s right-click callback', async () => {
+      const onFrameMenu = vi.fn();
+      const body = '<table><tr><td>Approve</td></tr></table>';
+      const { container } = render(
+        <MessageBody
+          message={chatMessage({ body })}
+          shape={shapeOf(body)}
+          labels={DEFAULT_LABELS}
+          onFrameMenu={onFrameMenu}
+        />,
+      );
+      const doc = await loadedFrameDocument(
+        container.querySelector('iframe') as HTMLIFrameElement,
+        '<p>Approve</p>',
+      );
+      rightClick(doc.querySelector('p') as Element, 3, 4);
+      expect(onFrameMenu).toHaveBeenCalledWith({
+        clientX: 3,
+        clientY: 4,
+        href: null,
+        selectionText: '',
+      });
+    });
   });
 
   describe('link clicks', () => {

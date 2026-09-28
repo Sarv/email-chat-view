@@ -212,14 +212,16 @@ strict CSP, so a hostile mail cannot script your page or phone home.
 ## Step 5 — Add your own buttons
 
 The view ships **no** actions — no star, no menu, no reply button. Those are
-your product's, wired to your store. It gives you three slots and positions them:
+your product's, wired to your store. It gives you four slots and positions them:
 
 ```tsx
 <MailChatView
   messages={messages}
   renderActions={(message) => <StarButton id={message.id} />}   // outer edge of the row
+  renderQuickActions={(message) => <ReplyButtons id={message.id} />}   // bubble's bottom corner
   renderFooter={(message) => <InlineReply id={message.id} />}   // inside, under the body
   renderHeaderMeta={(message) => <Shield id={message.id} />}   // header line, after the time
+  onMessageMenu={(message, { clientX, clientY }) => openMenu(message, clientX, clientY)}   // right-click
 />
 ```
 
@@ -416,7 +418,8 @@ array first — it tells you which rule to turn off or narrow.
 - [ ] A parser passed anywhere that is not a browser
 - [ ] `bodyPending` / `bodyFailed` set instead of empty bodies
 - [ ] A cache created outside render
-- [ ] `renderActions` / `renderFooter` / `renderHeaderMeta` returning `null` when there is nothing to act on
+- [ ] `renderActions` / `renderQuickActions` / `renderFooter` / `renderHeaderMeta` returning `null` when there is nothing to act on
+- [ ] `onMessageMenu` returning `false` wherever you have no menu to show, so the browser's own still opens
 - [ ] Checked `message.applied` on a real thread to see what the rules removed
 
 ---

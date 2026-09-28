@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
+import { createPortal } from 'react-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatBubble, RecipientsSummary } from '../../src/components/ChatBubble.js';
+import type { ChatMessage } from '../../src/types.js';
 import { DEFAULT_LABELS } from '../../src/ui/labels.js';
-import { settleFrameLoad } from '../helpers/frames.js';
+import { loadedFrameDocument, placeFrame, rightClick, settleFrameLoad } from '../helpers/frames.js';
 import { chatMessage, NOW } from '../helpers/messages.js';
 
 /** Plain `rgb()` so jsdom's CSSOM hands the same string back. */
@@ -409,6 +411,472 @@ describe('ChatBubble', () => {
     // The footer belongs INSIDE the bubble; the actions belong outside it.
     expect(container.querySelector('.sec-bubble .host-footer')).not.toBeNull();
     expect(container.querySelector('.sec-actions')?.textContent).toBe('star m1');
+  });
+
+  describe('quick actions', () => {
+    const quick = (each: ChatMessage) => <button type="button">reply {each.id}</button>;
+    /** A body the view frames: a designed mail, in a `--doc` bubble. */
+    const DOCUMENT = '<table><tr><td>Approve</td></tr></table>';
+
+    // Regression: the cluster is positioned against its anchor, so the anchor
+    // must wrap exactly the bubble — and a short reply's anchor must HUG it.
+    // Anchored to the column instead, the buttons float in empty space beside
+    // a two-word reply whenever the header above it is wider.
+    it('anchors the host’s quick actions to a short bubble’s own box', () => {
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={quick}
+          {...FIXED}
+        />,
+      );
+      const anchor = container.querySelector('.sec-col--hug > .sec-bubble-anchor') as HTMLElement;
+      expect(anchor.className).toBe('sec-bubble-anchor');
+      // The bubble, then the cluster — and nothing else in the positioning box.
+      expect([...anchor.children].map((child) => child.classList[0])).toEqual([
+        'sec-bubble',
+        'sec-quick',
+      ]);
+      expect(anchor.querySelector('.sec-quick')?.textContent).toBe('reply m1');
+    });
+
+    // Regression: a document bubble is `overflow: hidden`, so a cluster placed
+    // INSIDE it has the half that straddles the bottom edge cut off. It has to
+    // be the bubble's sibling, in an anchor that spans the column the way the
+    // wide bubble does.
+    it('keeps them outside a document bubble, which clips what it holds', () => {
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage({ body: DOCUMENT })}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={quick}
+          {...FIXED}
+        />,
+      );
+      const anchor = container.querySelector('.sec-bubble-anchor') as HTMLElement;
+      expect(anchor.className).toBe('sec-bubble-anchor sec-bubble-anchor--wide');
+      expect(anchor.querySelector(':scope > .sec-bubble--doc')).not.toBeNull();
+      expect(anchor.querySelector(':scope > .sec-quick')).not.toBeNull();
+      expect(container.querySelector('.sec-bubble .sec-quick')).toBeNull();
+    });
+
+    // Regression: a long letter is wide but not a document; its anchor must
+    // widen with it or the bubble's `width: 100%` resolves against a
+    // shrink-wrapped box.
+    it('widens the anchor with a long inline bubble', () => {
+      const body = `<p>${'Thanks for the update, I will take a look today. '.repeat(12)}</p>`;
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage({ body })}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={quick}
+          {...FIXED}
+        />,
+      );
+      expect(container.querySelector('.sec-bubble-anchor')?.className).toBe(
+        'sec-bubble-anchor sec-bubble-anchor--wide',
+      );
+    });
+
+    // Regression: reply and forward apply to the reader's own messages too;
+    // a slot that only rendered on the other side would hide half the thread's
+    // actions.
+    it('puts them on the reader’s own bubbles too', () => {
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage({ isFromMe: true })}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={quick}
+          {...FIXED}
+        />,
+      );
+      expect(
+        container.querySelector('.sec-row--mine .sec-bubble-anchor .sec-quick'),
+      ).not.toBeNull();
+    });
+
+    // Regression: other hosts style `.sec-col > .sec-bubble`. A host that uses
+    // no quick actions must get exactly the DOM it had before they existed.
+    it('changes nothing about the DOM without the slot', () => {
+      const { container } = render(
+        <ChatBubble message={chatMessage()} labels={DEFAULT_LABELS} {...FIXED} />,
+      );
+      expect(container.querySelector('.sec-bubble-anchor')).toBeNull();
+      expect(container.querySelector('.sec-quick')).toBeNull();
+      expect(container.querySelector('.sec-col > .sec-bubble')).not.toBeNull();
+    });
+
+    // Regression: a recovered quote has no mail to reply to, and the host says
+    // so by returning nothing. An empty cluster would still be a hover target
+    // over the bubble's corner, and an anchor would still change the DOM.
+    it.each([null, undefined, false])(
+      'renders no wrapper at all when the host returns %s',
+      (value) => {
+        const { container } = render(
+          <ChatBubble
+            message={chatMessage()}
+            labels={DEFAULT_LABELS}
+            renderQuickActions={() => value}
+            {...FIXED}
+          />,
+        );
+        expect(container.querySelector('.sec-bubble-anchor')).toBeNull();
+        expect(container.querySelector('.sec-quick')).toBeNull();
+        expect(container.querySelector('.sec-col > .sec-bubble')).not.toBeNull();
+      },
+    );
+
+    // Regression: the two slots are different places. The row actions stay on
+    // the column's outer edge, not inside the bubble's anchor.
+    it('leaves the row actions where they were', () => {
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={quick}
+          renderActions={() => <button type="button">star</button>}
+          {...FIXED}
+        />,
+      );
+      expect(container.querySelector('.sec-col > .sec-actions')?.textContent).toBe('star');
+      expect(container.querySelector('.sec-bubble-anchor .sec-actions')).toBeNull();
+    });
+
+    // Regression: hosts pass an inline arrow function, a new identity every
+    // render. If that alone re-mounted the bubble, every framed mail in the
+    // thread would reload — and blank — on every re-render of the list.
+    it('keeps the same bubble across re-renders while there are quick actions', () => {
+      const message = chatMessage({ body: DOCUMENT });
+      const { container, rerender } = render(
+        <ChatBubble
+          message={message}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={(each) => quick(each)}
+          {...FIXED}
+        />,
+      );
+      const frame = container.querySelector('iframe');
+      rerender(
+        <ChatBubble
+          message={message}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={(each) => quick(each)}
+          {...FIXED}
+        />,
+      );
+      expect(container.querySelector('iframe')).toBe(frame);
+    });
+
+    // KNOWN GAP, deliberate: "no wrapper at all when the answer is null" means
+    // the anchor comes and goes with the answer, and React re-parents the
+    // bubble when it does — a framed body reloads once. The README tells hosts
+    // to decide per message, not per render (an answer that waits on async
+    // data flips once). If the anchor is ever made unconditional, this test
+    // changes with it, deliberately.
+    it('known gap: re-mounts the bubble when the answer flips between null and a node', () => {
+      const message = chatMessage({ body: DOCUMENT });
+      const { container, rerender } = render(
+        <ChatBubble
+          message={message}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={() => null}
+          {...FIXED}
+        />,
+      );
+      const frame = container.querySelector('iframe');
+      rerender(
+        <ChatBubble
+          message={message}
+          labels={DEFAULT_LABELS}
+          renderQuickActions={quick}
+          {...FIXED}
+        />,
+      );
+      expect(container.querySelector('.sec-bubble-anchor iframe')).not.toBeNull();
+      expect(container.querySelector('iframe')).not.toBe(frame);
+    });
+  });
+
+  describe('onMessageMenu', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      window.getSelection()?.removeAllRanges();
+    });
+
+    const LINKED = '<p>See <a href="https://x.example/a"><b>the plan</b></a></p>';
+
+    // Regression: a right-click on a message is the host's to answer — with
+    // the message it was on, where to open the menu, and the link under the
+    // pointer — and the browser's own menu must not open on top of the host's.
+    it('reports a right-click on the body and suppresses the browser’s menu', () => {
+      const onMessageMenu = vi.fn();
+      const message = chatMessage({ body: LINKED });
+      const { container } = render(
+        <ChatBubble
+          message={message}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          {...FIXED}
+        />,
+      );
+      const opened = fireEvent.contextMenu(container.querySelector('b') as Element, {
+        clientX: 12,
+        clientY: 34,
+      });
+      expect(onMessageMenu).toHaveBeenCalledWith(message, {
+        clientX: 12,
+        clientY: 34,
+        href: 'https://x.example/a',
+        selectionText: '',
+      });
+      // `fireEvent` returns false when the default was prevented.
+      expect(opened).toBe(false);
+    });
+
+    // Regression: the header is part of the message — right-clicking the
+    // sender's name is as natural a way to ask for "reply" as the body is.
+    it('reports a right-click on the header', () => {
+      const onMessageMenu = vi.fn();
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          {...FIXED}
+        />,
+      );
+      fireEvent.contextMenu(container.querySelector('.sec-head__sender') as Element);
+      expect(onMessageMenu).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'm1' }),
+        expect.objectContaining({ href: null }),
+      );
+    });
+
+    // Regression: "Copy" on a menu is useless without the text the reader
+    // selected in this message.
+    it('reports the reader’s selection inside the message', () => {
+      const onMessageMenu = vi.fn();
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          {...FIXED}
+        />,
+      );
+      const paragraph = container.querySelector('.sec-body p') as Element;
+      window.getSelection()?.selectAllChildren(paragraph);
+      fireEvent.contextMenu(paragraph);
+      expect(onMessageMenu.mock.calls[0]?.[1].selectionText).toBe('Sounds good — see you at 4.');
+    });
+
+    // Regression: a selection left in one bubble while the reader right-clicks
+    // another must not be offered — "Copy" would copy a different message.
+    it('does not report a selection that lies in another message', () => {
+      const onMessageMenu = vi.fn();
+      const { container } = render(
+        <>
+          <ChatBubble
+            message={chatMessage({ id: 'a', body: '<p>From the first</p>' })}
+            labels={DEFAULT_LABELS}
+            onMessageMenu={onMessageMenu}
+            {...FIXED}
+          />
+          <ChatBubble
+            message={chatMessage({ id: 'b', body: '<p>From the second</p>' })}
+            labels={DEFAULT_LABELS}
+            onMessageMenu={onMessageMenu}
+            {...FIXED}
+          />
+        </>,
+      );
+      const [first, second] = [...container.querySelectorAll('.sec-body p')] as Element[];
+      window.getSelection()?.selectAllChildren(first as Element);
+      fireEvent.contextMenu(second as Element);
+      expect(onMessageMenu).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'b' }),
+        expect.objectContaining({ selectionText: '' }),
+      );
+    });
+
+    // Regression: a host with nothing to offer declines — a web host with no
+    // menu for plain text, say — and then the browser's own menu must still
+    // open. Suppressed anyway, the reader gets no menu at all.
+    it('leaves the browser’s menu alone when the host declines', () => {
+      const onMessageMenu = vi.fn(() => false);
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          {...FIXED}
+        />,
+      );
+      expect(fireEvent.contextMenu(container.querySelector('.sec-body') as Element)).toBe(true);
+      expect(onMessageMenu).toHaveBeenCalledTimes(1);
+    });
+
+    // Regression: a host that never asked for right-clicks must not lose the
+    // browser's menu on every message.
+    it('changes nothing without a handler', () => {
+      const { container } = render(
+        <ChatBubble message={chatMessage({ body: LINKED })} labels={DEFAULT_LABELS} {...FIXED} />,
+      );
+      expect(fireEvent.contextMenu(container.querySelector('b') as Element)).toBe(true);
+    });
+
+    // Regression: the host's own controls are not the message. A message menu
+    // opening over a reply button fights whatever the button's own
+    // right-click does, and hides the button the reader was aiming at.
+    it('ignores a right-click on the host’s row actions and quick actions', () => {
+      const onMessageMenu = vi.fn();
+      render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          renderActions={() => <button type="button">star</button>}
+          renderQuickActions={() => (
+            <button type="button">
+              <i>reply</i>
+            </button>
+          )}
+          {...FIXED}
+        />,
+      );
+      expect(fireEvent.contextMenu(screen.getByRole('button', { name: 'star' }))).toBe(true);
+      // Inside a control, not just on it.
+      expect(fireEvent.contextMenu(screen.getByText('reply'))).toBe(true);
+      expect(onMessageMenu).not.toHaveBeenCalled();
+    });
+
+    // Regression: React bubbles a PORTAL's events through the component tree.
+    // A host dropdown portalled to `document.body` from one of the slots
+    // arrives at the bubble's handler although nothing under the pointer is
+    // the message — and a right-click in that dropdown opened a message menu
+    // over it.
+    it('ignores a right-click inside something the host portals out of the bubble', () => {
+      const onMessageMenu = vi.fn();
+      // A layer of the host's own, as a menu library would create. Not
+      // `document.body` itself: the suite clears the body before React
+      // unmounts, which would pull the portal's child out from under it.
+      const layer = document.createElement('div');
+      document.body.append(layer);
+      render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          renderFooter={() => createPortal(<button type="button">dropdown item</button>, layer)}
+          {...FIXED}
+        />,
+      );
+      const item = screen.getByRole('button', { name: 'dropdown item' });
+      expect(item.closest('.sec-row')).toBeNull();
+      expect(fireEvent.contextMenu(item)).toBe(true);
+      expect(onMessageMenu).not.toHaveBeenCalled();
+    });
+
+    // Regression: a framed body is a separate document, so its right-click
+    // never reaches the column's handler — the frame has to report it, with
+    // the point translated into the page and the message attached.
+    it('reports a right-click inside a framed body, in the page’s coordinates', async () => {
+      const onMessageMenu = vi.fn();
+      const message = chatMessage({ body: '<table><tr><td>Approve</td></tr></table>' });
+      const { container } = render(
+        <ChatBubble
+          message={message}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          {...FIXED}
+        />,
+      );
+      const frame = container.querySelector('iframe') as HTMLIFrameElement;
+      const doc = await loadedFrameDocument(frame, LINKED);
+      placeFrame(frame, 40, 60);
+      const event = rightClick(doc.querySelector('b') as Element, 5, 6);
+      expect(onMessageMenu).toHaveBeenCalledWith(message, {
+        clientX: 45,
+        clientY: 66,
+        href: 'https://x.example/a',
+        selectionText: '',
+      });
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    // Regression: the bubble wraps `onMessageMenu` for the frame, and a wrapper
+    // that dropped its return value swallowed the host's `false` — a web host
+    // declining a right-click inside a framed mail lost the browser's menu
+    // there, while the same decline worked on an inline body.
+    it('passes the host’s decline through from inside a framed body', async () => {
+      const onMessageMenu = vi.fn(() => false);
+      const { container } = render(
+        <ChatBubble
+          message={chatMessage({ body: '<table><tr><td>Approve</td></tr></table>' })}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          {...FIXED}
+        />,
+      );
+      const frame = container.querySelector('iframe') as HTMLIFrameElement;
+      const doc = await loadedFrameDocument(frame, LINKED);
+      const event = rightClick(doc.querySelector('b') as Element, 5, 6);
+      expect(onMessageMenu).toHaveBeenCalledTimes(1);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    // Regression: host content inside the message — an inline reply editor in
+    // the footer — can answer a right-click with a menu of its own. React
+    // still bubbles the event up to the column, and the message menu opened
+    // as a second menu on top of the editor's.
+    it('stays out of a right-click that something inside the message already handled', () => {
+      const onMessageMenu = vi.fn();
+      render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          renderFooter={() => (
+            <div onContextMenu={(event) => event.preventDefault()}>
+              <span>draft</span>
+            </div>
+          )}
+          {...FIXED}
+        />,
+      );
+      fireEvent.contextMenu(screen.getByText('draft'));
+      expect(onMessageMenu).not.toHaveBeenCalled();
+    });
+
+    // Regression: a text field's own menu — paste, spelling suggestions — is
+    // what the reader right-clicked it for. A message menu opening in its
+    // place, with the browser's suppressed, left a reply box with no paste.
+    it('leaves a right-click in a text field to the field', () => {
+      const onMessageMenu = vi.fn();
+      render(
+        <ChatBubble
+          message={chatMessage()}
+          labels={DEFAULT_LABELS}
+          onMessageMenu={onMessageMenu}
+          renderFooter={() => (
+            <>
+              <textarea aria-label="reply" />
+              <input aria-label="subject" />
+              <div contentEditable suppressContentEditableWarning>
+                <b>typed</b>
+              </div>
+            </>
+          )}
+          {...FIXED}
+        />,
+      );
+      expect(fireEvent.contextMenu(screen.getByLabelText('reply'))).toBe(true);
+      expect(fireEvent.contextMenu(screen.getByLabelText('subject'))).toBe(true);
+      // Inside a rich editor, not just on it.
+      expect(fireEvent.contextMenu(screen.getByText('typed'))).toBe(true);
+      expect(onMessageMenu).not.toHaveBeenCalled();
+    });
   });
 
   // Regression: a per-message mark belongs on the metadata line the reader

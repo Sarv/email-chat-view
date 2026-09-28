@@ -318,6 +318,7 @@ rendering anything.
 | `ui/frame.ts` | the sandboxed frame — its CSP, its document, its height measurement, its link interception |
 | `ui/attachments.ts` | chip text and which types offer a preview |
 | `ui/labels.ts` | every string the view can render, overridable by the host |
+| `ui/message-menu.ts` | the right-click request: which link was under the pointer, whether the selection belongs to THIS message, and where a frame's viewport starts in the page — the one coordinate space a host menu needs |
 
 ### `src/components/`
 
@@ -326,7 +327,8 @@ rendering anything.
 | `components/MailChatView.tsx` | the composed thread: separators, runs, colours, scroll anchoring, the DOM ceiling, visible-range reporting |
 | `components/ChatBubble.tsx` | one message. Exported on its own for hosts with their own list |
 | `components/MessageBody.tsx` | the five body states — content, pending, failed, empty, quoted-only |
-| `components/SandboxedBody.tsx` | the iframe wiring for a rich body |
+| `components/SandboxedBody.tsx` | the iframe wiring for a rich body — measurement, and the link and right-click listeners on the frame's own document |
+| `components/use-latest.ts` | `useLatest`, the ref an effect reads a host callback through so it never has to depend on one. Internal, not exported |
 | `components/AttachmentChip.tsx` | one attachment chip; reports clicks, never fetches |
 | `components/Avatar.tsx`, `DateSeparator.tsx`, `ChatSkeleton.tsx`, `Tooltip.tsx`, `icons.tsx` | the primitives. Icons are traced inline rather than imported from a library |
 

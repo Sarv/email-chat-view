@@ -1,20 +1,27 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { SandboxedBody } from '../../src/components/SandboxedBody.js';
 import { DEFAULT_LABELS } from '../../src/ui/labels.js';
-import { settleFrameLoad } from '../helpers/frames.js';
+import { loadedFrameDocument, placeFrame, rightClick, settleFrameLoad } from '../helpers/frames.js';
 import { FakeResizeObserver, installResizeObserver } from '../helpers/observers.js';
 
+type FakeListener = (event: unknown) => void;
+
 interface FakeFrameDoc {
+  readyState: DocumentReadyState;
+  URL: string;
   body: { scrollHeight: number; getBoundingClientRect: () => { top: number } } | null;
   documentElement: { scrollHeight: number };
   querySelectorAll: (selector: string) => Element[];
   createRange: () => unknown;
-  addEventListener: (type: string, listener: (event: unknown) => void) => void;
-  removeEventListener: ReturnType<typeof vi.fn>;
-  clickListeners: ((event: unknown) => void)[];
+  addEventListener: (type: string, listener: FakeListener) => void;
+  removeEventListener: Mock<[type: string, listener: FakeListener], void>;
+  /** What is attached right now, by event type. Removal really removes. */
+  listeners: Record<string, FakeListener[]>;
+  clickListeners: FakeListener[];
 }
 
 /**
@@ -27,8 +34,12 @@ interface FakeFrameDoc {
  * document is missing, one with no body, one that measures zero.
  */
 function fakeFrameDoc(height = 250, body: 'present' | 'missing' = 'present'): FakeFrameDoc {
-  const clickListeners: ((event: unknown) => void)[] = [];
+  const listeners: Record<string, FakeListener[]> = {};
+  const clickListeners: FakeListener[] = [];
+  listeners.click = clickListeners;
   return {
+    readyState: 'complete',
+    URL: 'about:srcdoc',
     body:
       body === 'missing'
         ? null
@@ -45,9 +56,16 @@ function fakeFrameDoc(height = 250, body: 'present' | 'missing' = 'present'): Fa
       getBoundingClientRect: () => ({ bottom: height }),
     }),
     addEventListener: (type, listener) => {
-      if (type === 'click') clickListeners.push(listener);
+      (listeners[type] ??= []).push(listener);
     },
-    removeEventListener: vi.fn(),
+    // Really removes, so a test can tell a listener that was taken off from
+    // one that is still there — which is the bug a stale-effect teardown is.
+    removeEventListener: vi.fn((type: string, listener: FakeListener) => {
+      const list = listeners[type] ?? [];
+      const at = list.indexOf(listener);
+      if (at >= 0) list.splice(at, 1);
+    }),
+    listeners,
     clickListeners,
   };
 }
@@ -211,6 +229,329 @@ describe('SandboxedBody', () => {
     // The click listener still goes on: a bodyless document is measurable at
     // zero, not unusable.
     expect(doc.clickListeners).toHaveLength(1);
+  });
+
+  describe('a right-click inside the frame', () => {
+    const LINKED = '<p id="p">Read <a href="https://x.example/a"><b>the plan</b></a></p>';
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      window.getSelection()?.removeAllRanges();
+    });
+
+    // Regression: the frame is a separate document, so its right-click never
+    // reaches the host's DOM — and its point is in the FRAME's viewport. Handed
+    // over untranslated, a host menu opens at the page's top-left corner; the
+    // border is in the sum because the frame's viewport starts inside it.
+    it('reports it in the page’s coordinates, with the link and the frame’s own selection', async () => {
+      const onFrameMenu = vi.fn();
+      const { container } = render(
+        <SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} onFrameMenu={onFrameMenu} />,
+      );
+      const frame = frameOf(container);
+      const doc = await loadedFrameDocument(frame, LINKED);
+      placeFrame(frame, 100, 200, 2);
+      doc.getSelection()?.selectAllChildren(doc.getElementById('p') as HTMLElement);
+
+      const event = rightClick(doc.querySelector('b') as Element, 10, 20);
+      expect(onFrameMenu).toHaveBeenCalledWith({
+        clientX: 112,
+        clientY: 222,
+        href: 'https://x.example/a',
+        selectionText: 'Read the plan',
+      });
+      // The host's menu replaces the frame's; both opening is two menus.
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    // Regression: a selection in the host page belongs to some OTHER message.
+    // Reported here, "Copy" on this message would copy another one's words.
+    it('does not report a selection made outside the frame', async () => {
+      const onFrameMenu = vi.fn();
+      const { container } = render(
+        <SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} onFrameMenu={onFrameMenu} />,
+      );
+      const doc = await loadedFrameDocument(frameOf(container), LINKED);
+      const elsewhere = document.createElement('p');
+      elsewhere.textContent = 'another message';
+      document.body.append(elsewhere);
+      window.getSelection()?.selectAllChildren(elsewhere);
+
+      rightClick(doc.getElementById('p') as Element, 1, 1);
+      expect(onFrameMenu).toHaveBeenCalledWith(
+        expect.objectContaining({ href: null, selectionText: '' }),
+      );
+    });
+
+    // Regression: a host with nothing to offer declines, and then the frame's
+    // own browser menu must still open — suppressed anyway, the reader gets no
+    // menu at all.
+    it('leaves the browser’s menu alone when the host declines', async () => {
+      const onFrameMenu = vi.fn(() => false);
+      const { container } = render(
+        <SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} onFrameMenu={onFrameMenu} />,
+      );
+      const doc = await loadedFrameDocument(frameOf(container), LINKED);
+      const event = rightClick(doc.querySelector('b') as Element, 1, 1);
+      expect(onFrameMenu).toHaveBeenCalledTimes(1);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    // Regression: a host that never asked for right-clicks must not lose the
+    // browser's menu inside every framed message — nor have the listener throw
+    // on every right-click calling a callback it was never given. A listener
+    // that throws leaves the default alone too, so the default alone cannot
+    // tell the two apart: what escaped the listener is checked as well.
+    it('changes nothing without a handler', async () => {
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      const doc = await loadedFrameDocument(frameOf(container), LINKED);
+      const escaped = vi.fn();
+      const frameWindow = doc.defaultView as Window;
+      frameWindow.addEventListener('error', escaped);
+      try {
+        expect(rightClick(doc.querySelector('b') as Element, 1, 1).defaultPrevented).toBe(false);
+      } finally {
+        frameWindow.removeEventListener('error', escaped);
+      }
+      expect(escaped).not.toHaveBeenCalled();
+    });
+
+    // Regression: THE stale-listener bug. The attach effect used to depend on
+    // the host's callbacks; an inline arrow function is a new identity every
+    // render, so the next render tore the listeners off the document and then
+    // waited for a `load` that had already fired. Links and right-click went
+    // dead inside every frame after the thread's first re-render.
+    it('keeps its listeners when the host’s callbacks change identity', async () => {
+      const [firstMenu, secondMenu, firstOpen, secondOpen] = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
+      const { container, rerender } = render(
+        <SandboxedBody
+          html="<p>hi</p>"
+          labels={DEFAULT_LABELS}
+          onFrameMenu={firstMenu}
+          onOpenLink={firstOpen}
+        />,
+      );
+      const doc = await loadedFrameDocument(frameOf(container), LINKED);
+      const removed = vi.spyOn(doc, 'removeEventListener');
+
+      rerender(
+        <SandboxedBody
+          html="<p>hi</p>"
+          labels={DEFAULT_LABELS}
+          onFrameMenu={secondMenu}
+          onOpenLink={secondOpen}
+        />,
+      );
+      expect(removed).not.toHaveBeenCalled();
+
+      const link = doc.querySelector('b') as Element;
+      rightClick(link, 1, 1);
+      link.dispatchEvent(
+        new (doc.defaultView as typeof window).MouseEvent('click', { bubbles: true }),
+      );
+      // The LATEST callbacks, not the ones the listeners were attached with.
+      expect(secondMenu).toHaveBeenCalledTimes(1);
+      expect(secondOpen).toHaveBeenCalledWith('https://x.example/a');
+      expect(firstMenu).not.toHaveBeenCalled();
+      expect(firstOpen).not.toHaveBeenCalled();
+    });
+
+    // Regression: a listener left on an unmounted frame's document keeps a
+    // closure over the host's callbacks alive, and fires them for a message
+    // that is no longer on screen.
+    it('removes every listener when it unmounts', async () => {
+      const onFrameMenu = vi.fn();
+      const { container, unmount } = render(
+        <SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} onFrameMenu={onFrameMenu} />,
+      );
+      const frame = frameOf(container);
+      const doc = await loadedFrameDocument(frame, LINKED);
+      const link = doc.querySelector('b') as Element;
+      const fromDoc = vi.spyOn(doc, 'removeEventListener');
+      const fromFrame = vi.spyOn(frame, 'removeEventListener');
+
+      unmount();
+      expect(fromDoc).toHaveBeenCalledWith('click', expect.any(Function));
+      expect(fromDoc).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+      expect(fromFrame).toHaveBeenCalledWith('load', expect.any(Function));
+      rightClick(link, 1, 1);
+      expect(onFrameMenu).not.toHaveBeenCalled();
+    });
+
+    // Regression: every load is a NEW document. Attaching per load without
+    // detaching left the old document's listeners and its ResizeObserver
+    // running on a page nobody can see — one more observer per reload.
+    it('moves its listeners and its observer to the new document on each load', async () => {
+      installResizeObserver();
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      const frame = frameOf(container);
+      const first = await loadedFrameDocument(frame, LINKED);
+      const firstObserver = FakeResizeObserver.latest;
+      const removed = vi.spyOn(first, 'removeEventListener');
+
+      const second = fakeFrameDoc(250);
+      Object.defineProperty(frame, 'contentDocument', { value: second, configurable: true });
+      fireEvent.load(frame);
+
+      expect(removed).toHaveBeenCalledWith('click', expect.any(Function));
+      expect(removed).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+      expect(firstObserver.disconnected).toBe(true);
+      expect(second.listeners.click).toHaveLength(1);
+      expect(second.listeners.contextmenu).toHaveLength(1);
+      expect(FakeResizeObserver.latest.targets).toEqual([second.body]);
+    });
+  });
+
+  describe('attaching to a frame that has already loaded', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /** Every frame reports `doc` as its document from the moment it exists. */
+    const frameDocumentIs = (doc: FakeFrameDoc | null) =>
+      vi
+        .spyOn(HTMLIFrameElement.prototype, 'contentDocument', 'get')
+        .mockReturnValue(doc as unknown as Document);
+
+    // jsdom's own `load` for the frame is still queued, and it reads the stub
+    // too. Flushed inside act at the end of each test, before any hook runs —
+    // left to fire in the gap after the test, it is an unwrapped state update.
+
+    // Regression: the attach race. Passive effects run on a later task, and a
+    // small `srcdoc` can finish loading before this one does — after which no
+    // `load` is coming, and a frame that only waited for one stayed unmeasured
+    // (invisible) with dead links for good.
+    it('attaches at once when the document is already complete', async () => {
+      const doc = fakeFrameDoc(250);
+      frameDocumentIs(doc);
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      // Synchronously after mount: no load event has been fired yet.
+      expect(doc.listeners.click).toHaveLength(1);
+      expect(doc.listeners.contextmenu).toHaveLength(1);
+      expect(frameOf(container).style.height).toBe('250px');
+      expect(frameOf(container).style.opacity).toBe('1');
+      await settleFrameLoad();
+    });
+
+    // The other half: a document still loading is not the message yet, and
+    // is attached when its own load arrives.
+    it('waits for the load while the document is still loading', async () => {
+      const doc = fakeFrameDoc(250);
+      doc.readyState = 'loading';
+      frameDocumentIs(doc);
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      expect(doc.listeners.contextmenu).toBeUndefined();
+      expect(frameOf(container).style.opacity).toBe('0');
+
+      fireEvent.load(frameOf(container));
+      expect(doc.listeners.contextmenu).toHaveLength(1);
+      expect(frameOf(container).style.opacity).toBe('1');
+      await settleFrameLoad();
+    });
+
+    // Regression: found in Chromium. A new frame starts on `about:blank`,
+    // ALSO "complete", whose quirks-mode body measures as tall as the frame.
+    // Attaching to it revealed the frame at its estimate before the message
+    // was in it — the snap the reveal exists to hide — and a lazy frame
+    // off-screen sat on that blank document until scrolled near.
+    it('does not attach early to the blank document a new frame starts with', async () => {
+      const blank = fakeFrameDoc(40);
+      blank.URL = 'about:blank';
+      frameDocumentIs(blank);
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      expect(blank.listeners.contextmenu).toBeUndefined();
+      expect(frameOf(container).style.opacity).toBe('0');
+      await settleFrameLoad();
+    });
+
+    // Regression: a frame with no document yet has nothing to measure or
+    // listen on, and must wait for its load rather than be revealed at its
+    // estimate.
+    it('waits when the frame has no document yet', async () => {
+      frameDocumentIs(null);
+      const { container } = render(<SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />);
+      expect(frameOf(container).style.opacity).toBe('0');
+      await settleFrameLoad();
+    });
+
+    // Regression: on a NEW body (images allowed, a theme change) the frame
+    // still holds the PREVIOUS message's document, complete and a srcdoc like
+    // any other, when the effect runs. Attached early, the outgoing page got
+    // the listeners and the observer and was re-measured, until the new load
+    // moved them over.
+    it('does not attach early to the outgoing document when the body changes', async () => {
+      const doc = fakeFrameDoc(250);
+      frameDocumentIs(doc);
+      const { container, rerender } = render(
+        <SandboxedBody html="<p>first</p>" labels={DEFAULT_LABELS} />,
+      );
+      expect(doc.listeners.contextmenu).toHaveLength(1);
+
+      rerender(<SandboxedBody html="<p>second</p>" labels={DEFAULT_LABELS} />);
+      expect(doc.listeners.click).toHaveLength(0);
+      expect(doc.listeners.contextmenu).toHaveLength(0);
+
+      // The new body's own load is what attaches.
+      fireEvent.load(frameOf(container));
+      expect(doc.listeners.contextmenu).toHaveLength(1);
+      await settleFrameLoad();
+    });
+
+    // Regression: the other side of the outgoing-document check. If the new
+    // body has ALREADY loaded when the effect runs — the race again, on a
+    // body change — its document is a different one, and it is attached at
+    // once: no `load` is coming for it.
+    it('attaches at once to a new body’s document that has already loaded', async () => {
+      const first = fakeFrameDoc(250);
+      const spy = frameDocumentIs(first);
+      const { rerender } = render(<SandboxedBody html="<p>first</p>" labels={DEFAULT_LABELS} />);
+
+      const second = fakeFrameDoc(300);
+      spy.mockReturnValue(second as unknown as Document);
+      rerender(<SandboxedBody html="<p>second</p>" labels={DEFAULT_LABELS} />);
+      expect(first.listeners.contextmenu).toHaveLength(0);
+      expect(second.listeners.click).toHaveLength(1);
+      expect(second.listeners.contextmenu).toHaveLength(1);
+      await settleFrameLoad();
+    });
+
+    // Regression: a document is OUTGOING only under a different body. React
+    // re-runs this effect for the SAME body on the SAME loaded document when a
+    // hidden subtree is shown again (`<Activity>`), and no load is coming
+    // then: a check on the document alone skipped it and left the frame with
+    // dead links and no menu. React 18 has no public way to re-show a subtree
+    // in a test, so the rule is pinned by the body flipping back to the one
+    // the document was attached for.
+    it('treats a document as outgoing only under a different body', async () => {
+      const doc = fakeFrameDoc(250);
+      frameDocumentIs(doc);
+      const { rerender } = render(<SandboxedBody html="<p>first</p>" labels={DEFAULT_LABELS} />);
+      rerender(<SandboxedBody html="<p>second</p>" labels={DEFAULT_LABELS} />);
+      expect(doc.listeners.contextmenu).toHaveLength(0);
+
+      rerender(<SandboxedBody html="<p>first</p>" labels={DEFAULT_LABELS} />);
+      expect(doc.listeners.click).toHaveLength(1);
+      expect(doc.listeners.contextmenu).toHaveLength(1);
+      await settleFrameLoad();
+    });
+
+    // Regression: StrictMode mounts every component twice in a host's
+    // development build. The frame only exists from the second render (its
+    // theme is read first), so the double mount must neither leave a
+    // second set of listeners on an already-loaded document nor none at all.
+    it('attaches exactly once to a loaded frame under StrictMode', async () => {
+      const doc = fakeFrameDoc(250);
+      frameDocumentIs(doc);
+      const { container } = render(
+        <StrictMode>
+          <SandboxedBody html="<p>hi</p>" labels={DEFAULT_LABELS} />
+        </StrictMode>,
+      );
+      expect(doc.listeners.click).toHaveLength(1);
+      expect(doc.listeners.contextmenu).toHaveLength(1);
+      expect(frameOf(container).style.opacity).toBe('1');
+      await settleFrameLoad();
+    });
   });
 
   // Regression: the frame is where a body is sanitized, so this is where a

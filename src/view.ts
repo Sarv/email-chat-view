@@ -16,6 +16,8 @@
 // --- The composed view -------------------------------------------------------
 export { MailChatView } from './components/MailChatView.js';
 export type { MailChatViewProps, VisibleRange } from './components/MailChatView.js';
+// What `onMessageMenu` hands the host on a right-click.
+export type { MessageMenuRequest } from './ui/message-menu.js';
 
 // --- The parts ---------------------------------------------------------------
 export { AttachmentChip } from './components/AttachmentChip.js';

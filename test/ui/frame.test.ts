@@ -6,6 +6,7 @@ import {
   clickedHref,
   estimateFrameHeight,
   FALLBACK_FRAME_THEME,
+  isLoadedSrcdoc,
   measureFrameHeight,
   readFrameTheme,
   sameFrameTheme,
@@ -386,6 +387,34 @@ describe('estimateFrameHeight', () => {
 
   it('scales with the size of the markup in between', () => {
     expect(estimateFrameHeight('x'.repeat(900))).toBe(200);
+  });
+});
+
+describe('isLoadedSrcdoc', () => {
+  const docWith = (readyState: string, URL: string) => ({ readyState, URL }) as unknown as Document;
+
+  // Regression: the attach race is only closed by attaching early to a frame
+  // that has ALREADY loaded its message — the one case with no `load` to come.
+  it('recognises a frame whose message has finished loading', () => {
+    expect(isLoadedSrcdoc(docWith('complete', 'about:srcdoc'))).toBe(true);
+  });
+
+  // Regression: a new frame's initial `about:blank` is "complete" too, and in
+  // quirks mode its empty body measures as tall as the frame. Taken for the
+  // message, it reveals the frame at its estimate before the message is in
+  // it, and the frame then visibly snaps to its real height.
+  it('does not mistake the blank document a frame starts with for the message', () => {
+    expect(isLoadedSrcdoc(docWith('complete', 'about:blank'))).toBe(false);
+  });
+
+  // Regression: a document still loading is not the message yet — measured,
+  // it reveals the frame before the content is in it — and a frame with no
+  // document has nothing to attach to; both must wait for the load.
+  it('waits for a message that is still loading, or a frame with no document', () => {
+    expect(isLoadedSrcdoc(docWith('loading', 'about:srcdoc'))).toBe(false);
+    expect(isLoadedSrcdoc(docWith('interactive', 'about:srcdoc'))).toBe(false);
+    expect(isLoadedSrcdoc(null)).toBe(false);
+    expect(isLoadedSrcdoc(undefined)).toBe(false);
   });
 });
 

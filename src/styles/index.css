@@ -98,6 +98,9 @@
   --sec-z-tooltip: 1000;
   /* Above the neighbouring bubbles it overhangs, below the tooltip it can open. */
   --sec-z-actions: 5;
+  /* How far the quick actions sit in from the bubble's inline-end edge — clear
+     of the rounded corner, so the cluster reads as ON the bubble. */
+  --sec-quick-inset: var(--sec-pad);
   --sec-dur: 120ms;
   /* Where a long filename or recipient list starts to ellipsize. */
   --sec-name-max-width: 22ch;
@@ -760,21 +763,29 @@
  * keyboard, because tabbing to an invisible button would leave the reader on a
  * control they cannot see.
  *
- * Taken out of the flow and hung off the column's OUTER edge, level with the
- * header. In the flow it would sit under the bubble as a permanent empty strip
- * — the row would grow and shrink as the pointer crossed it, and the whole
- * thread would jitter. Outside, it costs no space and reveals into the gutter
- * the bubble's max-width already leaves free.
+ * Both host slots — the row's actions and the bubble's quick actions — share
+ * this rule and the reveal below, so the two can never appear on different
+ * cues or at different speeds.
+ *
+ * Taken out of the flow. In the flow a slot would sit under the bubble as a
+ * permanent empty strip — the row would grow and shrink as the pointer crossed
+ * it, and the whole thread would jitter. Out of it, it costs no space.
  */
-.sec-actions {
+.sec-actions,
+.sec-quick {
   position: absolute;
-  inset-block-start: 0;
   z-index: var(--sec-z-actions);
   display: flex;
   align-items: center;
   gap: var(--sec-gap-sm);
   opacity: 0;
   transition: opacity var(--sec-dur) ease-out;
+}
+
+/* The row's actions hang off the column's OUTER edge, level with the header,
+   revealing into the gutter the bubble's max-width already leaves free. */
+.sec-actions {
+  inset-block-start: 0;
 }
 
 /* `inset-inline-*` follows the writing direction, not the row's flex direction,
@@ -791,8 +802,104 @@
 }
 
 .sec-row:hover .sec-actions,
-.sec-row:focus-within .sec-actions {
+.sec-row:focus-within .sec-actions,
+.sec-row:hover .sec-quick,
+.sec-row:focus-within .sec-quick {
   opacity: 1;
+  /* The quick actions are not hit-testable while hidden (see `.sec-quick`). */
+  pointer-events: auto;
+}
+
+/*
+ * Quick actions — reply, reply all, forward — on the bubble's bottom
+ * inline-end corner, for every bubble: mine and theirs, a two-word reply and a
+ * framed document.
+ *
+ * They are positioned against `.sec-bubble-anchor`, not against the bubble or
+ * the column, and each of those would be wrong in its own way:
+ *
+ *   - the BUBBLE: a document bubble is `overflow: hidden` (its corners have to
+ *     clip the mail), which would cut off the half hanging below the edge;
+ *   - the COLUMN: a short reply hugs its text, and its column is as wide as
+ *     the header above it — a long sender name and recipient list put the
+ *     column's corner well past the bubble's, and the cluster would float in
+ *     empty space beside a two-word reply.
+ *
+ * The anchor is sized to the bubble exactly — hugging with it, or full width
+ * with a wide one — and exists only while there are quick actions, so a host
+ * that uses none keeps `.sec-bubble` as a direct child of `.sec-col`.
+ */
+.sec-bubble-anchor {
+  position: relative;
+  /* Lays the bubble out exactly as the column did before the anchor was put
+     between them: a flex column, aligned to whichever side the column is
+     (`inherit`, so a host that re-aligns the column re-aligns this too). As a
+     plain block the anchor would change where a bubble WIDER than its box goes
+     — and one is, in a host without a global `box-sizing: border-box`, where a
+     wide bubble is its full width plus its padding. The column pushes that
+     overflow away from the avatar; a block pushes it toward the inline end,
+     which on the reader's own row is straight at their avatar. */
+  display: flex;
+  flex-direction: column;
+  align-items: inherit;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A wide bubble is `width: 100%` of its parent, and its parent is now the
+   anchor: left to shrink-wrap, the anchor would give a framed body the
+   iframe's 300px default and nothing more. */
+.sec-bubble-anchor--wide {
+  width: 100%;
+}
+
+/*
+ * Straddling the bottom edge, half in and half out: on a one-line reply the
+ * inner half lands in the bubble's bottom padding rather than over its words,
+ * and the outer half in the gap before the next row. The hovered row is lifted
+ * (see `.sec-row:hover`), so that half is painted over the next bubble rather
+ * than under it.
+ *
+ * The straddle is a ZERO-HEIGHT box lying on the bottom edge, whose buttons
+ * (`align-items: center`, above) overflow it equally up and down — never a
+ * `transform`. A transform (and so would `filter`, `will-change` or `contain`)
+ * makes this box the containing block of every `position: fixed` element
+ * inside it, and a host tooltip on a reply button is exactly that: placed
+ * from the viewport, it would land wherever the transform put the box, and
+ * the thread's scroll box would clip it. A zero-height box also has no hit
+ * area of its own, however far it is stretched across the bubble below.
+ *
+ * `min-inline-size: max-content`: never narrower than its buttons, so a
+ * bubble narrower than the cluster moves the cluster instead of squeezing the
+ * host's buttons.
+ */
+.sec-quick {
+  inset-block-end: 0;
+  inset-inline-end: var(--sec-quick-inset);
+  block-size: 0;
+  min-inline-size: max-content;
+  /* Invisible is not enough: the half hanging below the bubble lies over the
+     top of the next row's bubble, and a hidden button there would take that
+     row's hover and its right-click. Hit-testable only while revealed. */
+  pointer-events: none;
+}
+
+/*
+ * Someone else's short reply — "OK", "Thanks" — can be narrower than the
+ * cluster, and pinned to the inline-end corner the overflow went toward the
+ * inline START: past the avatar and out of the thread, which clipped the first
+ * button. So on their rows the box spans the bubble from its inline-start edge
+ * and packs the buttons at its end. A wide bubble looks exactly the same; a
+ * bubble narrower than the buttons has the box grow to fit them (see
+ * `min-inline-size`), the end inset give way, and the cluster start at the
+ * bubble's inline-start edge, reaching into the empty column beside it.
+ *
+ * The reader's own row needs none of this: its bubble sits against the inline
+ * end, so its overflow already goes inward, into the free side of the row.
+ */
+.sec-row--theirs .sec-quick {
+  inset-inline-start: 0;
+  justify-content: flex-end;
 }
 
 /* ------------------------------------------------------------ tooltips --- */
@@ -916,7 +1023,7 @@
 /* ------------------------------------------------------------- motion --- */
 
 /*
- * Everything animated above is decorative — a spinner, a pulse, two fades —
+ * Everything animated above is decorative — a spinner, a pulse, the fades —
  * so a reader who has asked for less motion loses nothing by turning them off.
  * The spinner keeps its shape and simply stops; the frame appears instantly
  * instead of fading.
@@ -928,7 +1035,8 @@
   }
 
   .sec-frame,
-  .sec-actions {
+  .sec-actions,
+  .sec-quick {
     transition: none;
   }
 }

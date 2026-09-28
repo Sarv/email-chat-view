@@ -326,6 +326,27 @@ export function measureFrameHeight(doc: Document | null | undefined): number {
   return Math.max(height, finite(body.scrollHeight), finite(rootOverflow(doc)));
 }
 
+/** The URL every `srcdoc` document has, by the HTML spec. */
+const SRCDOC_URL = 'about:srcdoc';
+
+/**
+ * Whether a frame's document is its `srcdoc`, fully loaded — as opposed to the
+ * initial `about:blank` every frame holds until its navigation commits.
+ *
+ * Both say `readyState === 'complete'`, which is why the state alone is not
+ * enough. The blank one is in quirks mode, where an empty body measures as tall
+ * as the frame's own viewport: measured, it "succeeds" at the frame's estimate
+ * and the frame is revealed before the message is in it — then snaps to the
+ * real height when the message arrives, which is the jump the reveal exists to
+ * hide. Observed in Chromium: a frame appended with a `srcdoc` holds that blank
+ * document, complete, with `body.scrollHeight` equal to the frame's height,
+ * until the next task — and an off-screen `loading="lazy"` frame holds it until
+ * it is scrolled near.
+ */
+export function isLoadedSrcdoc(doc: Document | null | undefined): boolean {
+  return doc?.readyState === 'complete' && doc.URL === SRCDOC_URL;
+}
+
 /**
  * How far the document's content overflows the frame's viewport — 0 when it
  * does not.

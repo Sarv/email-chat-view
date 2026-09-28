@@ -19,6 +19,7 @@ import type { HtmlParser } from '../dom.js';
 import type { Attachment, ChatMessage } from '../types.js';
 import { DEFAULT_SENDER_RUN_MS, groupMessagesByDate, isSameSenderRun } from '../ui/grouping.js';
 import { fillTemplate, resolveLabels, type ViewLabels } from '../ui/labels.js';
+import type { MessageMenuRequest } from '../ui/message-menu.js';
 import { buildSenderColorMap, resolveSenderColor } from '../ui/sender-colors.js';
 import { isConversationalThread } from '../ui/thread-tone.js';
 
@@ -26,6 +27,7 @@ import { ChatBubble } from './ChatBubble.js';
 import { ChatSkeleton } from './ChatSkeleton.js';
 import { DateSeparator } from './DateSeparator.js';
 import { ChevronUpIcon, SpinnerIcon } from './icons.js';
+import { useLatest } from './use-latest.js';
 
 /** Which messages the reader can currently see. Indices are into `messages`. */
 export interface VisibleRange {
@@ -37,29 +39,6 @@ export interface VisibleRange {
 
 /** Default DOM ceiling. Older bubbles stay one click away. */
 const DEFAULT_MAX_RENDERED = 50;
-
-/**
- * Keep the latest value of something in a ref.
- *
- * So an effect can USE a callback without DEPENDING on it. Host callbacks are
- * almost always inline arrow functions, whose identity changes on every render;
- * an effect that listed one in its dependencies would tear down and rebuild its
- * observers on every render, which for an IntersectionObserver means it never
- * settles long enough to report anything.
- *
- * The write is in an effect, not in the render body. A render can be thrown
- * away before it commits, and a ref written by a discarded render would then
- * hold a value the reader never saw. Every consumer here reads `.current` from
- * an observer callback — asynchronous, long after commit — and this hook is
- * called above the effects that use it, so the ref is always current by then.
- */
-function useLatest<T>(value: T) {
-  const ref = useRef(value);
-  useEffect(() => {
-    ref.current = value;
-  }, [value]);
-  return ref;
-}
 
 export interface MailChatViewProps {
   /** The thread, oldest first. */
@@ -89,8 +68,19 @@ export interface MailChatViewProps {
   onRetryBody?: (message: ChatMessage) => void;
   onPreviewAttachment?: (attachment: Attachment, message: ChatMessage) => void;
   onDownloadAttachment?: (attachment: Attachment, message: ChatMessage) => void;
+  /**
+   * A right-click anywhere in a message — header, bubble, body, and inside a
+   * framed body too. Return `false` to decline and leave the browser's own
+   * menu in place. See {@link ChatBubbleProps.onMessageMenu}.
+   */
+  onMessageMenu?: (message: ChatMessage, request: MessageMenuRequest) => boolean | void;
   /** Per-bubble controls at the outer edge: menus, star, an AI re-run. */
   renderActions?: (message: ChatMessage) => ReactNode;
+  /**
+   * One-click actions on the bubble's bottom inline-end corner: reply, reply
+   * all, forward. See {@link ChatBubbleProps.renderQuickActions}.
+   */
+  renderQuickActions?: (message: ChatMessage) => ReactNode;
   /**
    * Per-message marks beside the timestamp: a security shield, a verified tick.
    * Renders on a run follower too, which has no header of its own — see
@@ -131,7 +121,9 @@ export function MailChatView({
   onRetryBody,
   onPreviewAttachment,
   onDownloadAttachment,
+  onMessageMenu,
   renderActions,
+  renderQuickActions,
   renderHeaderMeta,
   renderFooter,
   hasOlder = false,
@@ -338,7 +330,9 @@ export function MailChatView({
                   onRetryBody={onRetryBody}
                   onPreviewAttachment={onPreviewAttachment}
                   onDownloadAttachment={onDownloadAttachment}
+                  onMessageMenu={onMessageMenu}
                   renderActions={renderActions}
+                  renderQuickActions={renderQuickActions}
                   renderHeaderMeta={renderHeaderMeta}
                   renderFooter={renderFooter}
                 />

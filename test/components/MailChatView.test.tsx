@@ -506,6 +506,31 @@ describe('MailChatView', () => {
     });
   });
 
+  describe('host slots', () => {
+    // Regression: the view is how most hosts reach a bubble, and a prop it does
+    // not pass down is a prop that silently does nothing — reply buttons that
+    // never appear, a right-click that opens the browser's menu instead.
+    it('passes quick actions and the message menu to every bubble', () => {
+      const onMessageMenu = vi.fn();
+      const messages = thread(3);
+      const { container } = renderView({
+        messages,
+        renderQuickActions: (message) => <button type="button">reply {message.id}</button>,
+        onMessageMenu,
+      });
+      expect([...container.querySelectorAll('.sec-quick')].map((node) => node.textContent)).toEqual(
+        ['reply m0', 'reply m1', 'reply m2'],
+      );
+
+      const opened = fireEvent.contextMenu(container.querySelectorAll('.sec-body')[1] as Element);
+      expect(onMessageMenu).toHaveBeenCalledWith(
+        messages[1],
+        expect.objectContaining({ href: null, selectionText: '' }),
+      );
+      expect(opened).toBe(false);
+    });
+  });
+
   it('takes a class from its host', () => {
     const { container } = renderView({ className: 'app-thread' });
     expect(container.querySelector('.sec-thread')?.className).toBe('sec-thread app-thread');

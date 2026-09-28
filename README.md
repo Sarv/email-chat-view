@@ -338,6 +338,7 @@ and correctly revealed:
 | Prop | Where it renders |
 | --- | --- |
 | `renderActions(message)` | at the bubble's **outer edge**, outside the bubble box — left of your own messages, right of everyone else's. Hidden at `opacity: 0`, revealed on row `:hover` **and on `:focus-within`**, so it is reachable by keyboard, not just by mouse |
+| `renderQuickActions(message)` | on the bubble's **bottom inline-end corner** (bottom right in a left-to-right page) of every bubble — your own and everyone else's, a two-word reply and a framed document alike — **straddling the bottom edge**, so on a one-line reply it sits in the bubble's padding rather than over its words. For one-click actions: reply, reply all, forward. Revealed exactly like `renderActions`: row `:hover` and `:focus-within`, the same fade, none under `prefers-reduced-motion` |
 | `renderFooter(message)` | **inside** the column, below the body — for something that belongs to the message rather than acting on it: an inline reply box, a translation notice, an extraction warning |
 | `renderHeaderMeta(message)` | on the **header line, after the timestamp** — for a mark that qualifies the message itself: a security shield, a verified-sender tick, a label. A follow-up in a sender run has no header and still gets it, in a row of its own: sender and time are inherited from the bubble above, a per-message judgement is not |
 
@@ -355,10 +356,92 @@ the reader's own, because the slot follows the side the bubble is on. Pass
 neither prop and none of it renders: you get the thread and nothing else.
 (They are hidden until hover or keyboard focus; the picture forces them visible.)
 
-Both are called per message and may return `null` — that is the correct answer
-for a recovered quote with no underlying mail to act on. The row is
+All of them are called per message and may return `null` — that is the correct
+answer for a recovered quote with no underlying mail to act on. The row is
 `position: relative` and the hovered row is lifted to `z-index: 1`, so controls
 hanging outside the column are never painted over by the next bubble.
+
+`renderQuickActions` returning `null`, `undefined` or `false` renders **no
+element at all**. When it does return something, the bubble gets one extra
+wrapper, `.sec-bubble-anchor`, around it — the box the cluster is positioned
+against, sized to the bubble exactly, and outside it so a framed document's
+`overflow: hidden` cannot clip the half that hangs below the edge. A host that
+styles `.sec-col > .sec-bubble` should know that selector stops matching those
+bubbles; `.sec-bubble` itself is unchanged. The cluster is inset from the corner
+by `--sec-quick-inset` (default `var(--sec-pad)`) and brings no background of its
+own — give your buttons one, since half of them sit outside the bubble. A
+message whose answer flips between `null` and a node while it is on screen
+re-mounts its bubble (a framed body reloads), so decide per message, not per
+render — an answer that waits on async data flips once, and reloads that mail.
+
+A few things about the cluster a host styling it should know:
+
+- **Never put `transform`, `filter`, `will-change` or `contain` on `.sec-quick`**
+  (or on `.sec-bubble-anchor`). Any of them makes the cluster the containing
+  block of every `position: fixed` element inside it — your tooltip on a reply
+  button, this package's own `Tooltip` — which then lands wherever the cluster
+  is instead of by its trigger, and is clipped by the thread's scroll box. The
+  straddle is done without one: `.sec-quick` is a zero-height box on the
+  bottom edge, with your buttons centred on it.
+- **On someone else's short reply** ("OK", "Thanks") narrower than your
+  buttons, the cluster starts at the bubble's inline-start edge and reaches into
+  the empty column beside it, rather than past the avatar and out of the thread.
+  On your own messages it reaches inward, toward the free side of the row. Your
+  buttons are never squeezed to fit a narrow bubble.
+- **While hidden, the cluster takes no pointer events** (`pointer-events: none`,
+  back to `auto` on reveal), because its lower half lies over the top of the
+  next bubble. Don't set `pointer-events` on your buttons, or the invisible ones
+  catch the next row's hover and right-click again.
+- **Use `box-sizing: border-box`**, globally or at least on `.sec-bubble`. Without
+  it a wide bubble is its column's width *plus* its padding and border, and
+  overhangs the column by that much (an overflow that predates this slot). The
+  cluster is positioned against the column's edge, not the overhang, so it then
+  sits `--sec-quick-inset` plus the overhang (about 26px by default) in from the
+  corner you see.
+
+### Right-click: your own context menu
+
+`onMessageMenu(message, request)` fires on a right-click **anywhere in a
+message** — the header, the bubble, the body, and inside a body rendered in the
+sandboxed frame, whose events never reach your page on their own. You draw the
+menu (a native Electron `Menu`, a React popover); the view tells you where and
+about what:
+
+```tsx
+<MailChatView
+  messages={messages}
+  onMessageMenu={(message, { clientX, clientY, href, selectionText }) => {
+    const email = emailFor(message);
+    if (!email) return false;                 // decline: the browser's menu opens instead
+    openMenu({ x: clientX, y: clientY, email, href, selectionText });
+  }}
+/>
+```
+
+| `MessageMenuRequest` field | What it is |
+| --- | --- |
+| `clientX`, `clientY` | the pointer, in **your page's** viewport coordinates — a right-click inside a framed body is translated out of the frame's own viewport (`frame rect + frame border + event point`), so position the menu with these directly |
+| `href` | the link under the pointer, or `null` — the same test a left-click uses (`http:`, `https:`, `mailto:` only), so you never offer "Copy link" for a link a click would refuse to open |
+| `selectionText` | the reader's selection, trimmed — but only when **all** of it lies inside this message (its header and bubble, or its frame); `''` otherwise, so "Copy" never copies a different message's words |
+
+Return **`false` to decline**: the browser's own menu then opens as usual, which
+is what a web host with nothing to offer at that spot wants. Any other return
+calls `preventDefault()`. Without the prop nothing changes — no listener
+suppresses anything.
+
+Not reported: right-clicks on your own controls in `renderActions` and
+`renderQuickActions` (they are yours, with menus of their own), and anything you
+portal out of the bubble — a dropdown rendered into `document.body` from a slot
+still bubbles through React's tree, but nothing under the pointer is the
+message. Nor a right-click in a text field — an `input`, a `textarea`, anything
+`contenteditable`, such as an inline reply box in `renderFooter` — whose own
+menu (paste, spelling) is the one the reader wants; nor one that something
+inside the message already handled with `preventDefault()`, so an editor with a
+context menu of its own never gets a message menu on top of it. A host with its
+own list gets the same through `ChatBubble`; the lower
+parts, `MessageBody` and `SandboxedBody`, take `onFrameMenu(request)` for the
+frame alone, because an inline body is ordinary DOM whose right-click reaches
+any ancestor's `onContextMenu`.
 
 Four more callbacks cover the affordances the view *does* draw, because it knows
 when they were clicked and you know what to do about it: `onOpenLink`,
@@ -899,14 +982,15 @@ they are not on the `/transform` entry.
 | Group | Props |
 | --- | --- |
 | **Data** | `messages` (the only required one), `currentUserAddress`, `locale`, `now`, `parser` |
-| **Your UI** | `renderActions(message)`, `renderFooter(message)`, `renderHeaderMeta(message)`, `emptyState`, `labels`, `className` |
-| **Your handlers** | `onOpenLink`, `onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment` |
+| **Your UI** | `renderActions(message)`, `renderQuickActions(message)`, `renderFooter(message)`, `renderHeaderMeta(message)`, `emptyState`, `labels`, `className` |
+| **Your handlers** | `onOpenLink`, `onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment`, `onMessageMenu(message, request: MessageMenuRequest) => boolean \| void` |
 | **Paging & scale** | `hasOlder`, `onLoadOlder`, `loadingOlder`, `onVisibleRangeChange`, `maxRendered`, `autoScroll`, `loading` |
 | **Presentation** | `senderRunWindowMs`, `blockRemoteImages` |
 
 See [Per-bubble actions](#per-bubble-actions-menus-star-reply) for
-`renderActions` / `renderFooter`, and [Paging older
-messages](#paging-older-messages) for the rest.
+`renderActions` / `renderQuickActions` / `renderFooter` and for
+`onMessageMenu` and its `MessageMenuRequest` (exported as a type), and [Paging
+older messages](#paging-older-messages) for the rest.
 
 `blockRemoteImages` defaults to `true` and takes a predicate when the answer is
 per message — which it is in any client with a "load images from this sender"
