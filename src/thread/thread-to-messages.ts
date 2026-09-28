@@ -144,6 +144,18 @@ function inferredQuoteDate(carrierMillis: number, index: number): number {
   return Number.isNaN(carrierMillis) ? Number.NaN : carrierMillis - index;
 }
 
+/** What {@link quoteDate} decides for one quoted message. */
+export interface QuoteDate {
+  /** Epoch milliseconds, or `NaN` when neither the quote nor its carrier had a readable date. */
+  date: number;
+  /**
+   * `true` when `date` was inferred from the carrier rather than read off the
+   * attribution line — put it on {@link ChatMessage.dateApprox} so the view
+   * marks the time as approximate.
+   */
+  approx: boolean;
+}
+
 /**
  * The date to put on a quoted message, and whether it is a guess.
  *
@@ -157,12 +169,49 @@ function inferredQuoteDate(carrierMillis: number, index: number): number {
  *
  * A carrier with no readable date of its own cannot contradict anything, so the
  * comparison quietly passes (`NaN > x` is false) and the read date stands.
+ *
+ * Exported so a host that splits a body itself — an LLM extraction pass, a
+ * corpus-specific splitter — dates the messages it carves out exactly the way
+ * {@link threadToMessages} does, instead of keeping a copy that drifts.
+ *
+ * The contract, case by case (`carrier` is `carrierMillis`):
+ *
+ * | `readDate`            | `carrierMillis` | result                                        |
+ * | --------------------- | --------------- | --------------------------------------------- |
+ * | `<= carrier`          | readable        | `{ date: readDate, approx: false }`           |
+ * | `> carrier`           | readable        | `{ date: carrier - index, approx: true }`     |
+ * | `null`                | readable        | `{ date: carrier - index, approx: true }`     |
+ * | a number              | `NaN`           | `{ date: readDate, approx: false }`           |
+ * | `null`                | `NaN`           | `{ date: NaN, approx: true }`                 |
+ *
+ * So with a readable carrier the result is CLAMPED: never later than the
+ * carrier, and any date that is not taken as read is `carrierMillis - index` —
+ * the carrier's own time, moved back one millisecond per quote level so the
+ * levels keep their newest-to-oldest order. A read date EQUAL to the carrier is
+ * believed; only a strictly later one is refused.
+ *
+ * @param readDate - Epoch milliseconds read off the quote's attribution line
+ *   (e.g. by `parseAttribution`), or `null` when none could be read. Pass
+ *   `null`, not `NaN`, for an unreadable date: only `null` triggers the
+ *   inference, and a `NaN` read date is returned as the date, unmarked.
+ * @param carrierMillis - Send time of the mail the quote was found inside, in
+ *   epoch milliseconds; `NaN` when that mail's own date is unreadable.
+ * @param index - The quote's position in the carrier's body: 0 is the carrier's
+ *   own text, 1 the first quote beneath it, 2 the quote inside that, and so on
+ *   (the index into {@link splitMailBody}'s segments). A non-negative integer.
+ * @returns The date to show and whether it is inferred — see {@link QuoteDate}.
+ *
+ * @example
+ * ```ts
+ * const { date, approx } = quoteDate(attribution?.date ?? null, carrierMillis, index);
+ * const message = { ...rest, date, ...(approx ? { dateApprox: true } : {}) };
+ * ```
  */
-function quoteDate(
+export function quoteDate(
   readDate: number | null,
   carrierMillis: number,
   index: number,
-): { date: number; approx: boolean } {
+): QuoteDate {
   if (readDate !== null && !(readDate > carrierMillis)) return { date: readDate, approx: false };
   return { date: inferredQuoteDate(carrierMillis, index), approx: true };
 }

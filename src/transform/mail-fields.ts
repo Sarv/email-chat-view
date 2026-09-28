@@ -28,6 +28,31 @@ export function toEpochMillis(date: number, unit: DateUnit): number {
  * `NaN` compares false against everything, so a comparator that does not name
  * the case returns an arbitrary order and `Array.sort` scatters those messages
  * through the thread.
+ *
+ * Exported so a host sorting messages it built itself puts them in the same
+ * order `mailsToMessages` and `threadToMessages` do. The contract:
+ *
+ * - both readable: `left - right` — negative when `left` is older, positive
+ *   when it is newer, `0` when they are equal;
+ * - exactly one is `NaN`: the `NaN` side sorts AFTER the readable one (`1` when
+ *   `left` is `NaN`, `-1` when `right` is), so every unreadable date lands at
+ *   the end of the list, where the view groups them under an honest heading;
+ * - both `NaN`: `0`, so a stable sort keeps them in the order it was given —
+ *   chain a tiebreak (`|| left.order - right.order`) when that order is not
+ *   already the one you want.
+ *
+ * Only `NaN` counts as unreadable here. Normalize first, the way the transforms
+ * do ({@link toEpochMillis}: zero, negative and non-finite dates become `NaN`),
+ * because a raw `0` passed straight in sorts as 1970, at the top of the thread.
+ *
+ * @param left - Epoch milliseconds, or `NaN` for an unreadable date.
+ * @param right - Epoch milliseconds, or `NaN` for an unreadable date.
+ * @returns A comparator result for `Array.prototype.sort`.
+ *
+ * @example
+ * ```ts
+ * messages.sort((a, b) => compareEpochMillis(a.date, b.date));
+ * ```
  */
 export function compareEpochMillis(left: number, right: number): number {
   const leftUnknown = Number.isNaN(left);

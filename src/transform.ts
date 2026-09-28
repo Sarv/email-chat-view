@@ -109,6 +109,16 @@ export {
 export type { ParsedAttribution } from './thread/attribution.js';
 export { parseHumanDate } from './thread/human-date.js';
 
+// --- Date order (for messages you build yourself) ----------------------------
+// The date rules the transforms run on: where an unreadable date sorts,
+// and how a quoted message is dated when its attribution line is missing or
+// impossible. A host that carves messages out of a body itself — an LLM pass,
+// a splitter of its own — imports these instead of copying them, so its
+// bubbles sort exactly where the library's would.
+export { compareEpochMillis } from './transform/mail-fields.js';
+export { quoteDate } from './thread/thread-to-messages.js';
+export type { QuoteDate } from './thread/thread-to-messages.js';
+
 // --- Slicing a tree between two nodes ----------------------------------------
 // What a DOM `Range` would do, done with `childNodes` and `removeChild` because
 // `Range` is the least implemented corner of every server-side DOM. A splitter

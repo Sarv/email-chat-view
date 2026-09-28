@@ -305,6 +305,44 @@ const emailFor = (message: ChatMessage) => store.get(message.sourceId ?? message
 `sourceId` is absent when the bubble *is* a whole mail, which is why the
 fallback to `id` is part of the idiom rather than an edge case.
 
+### Dating and ordering them the way the library does
+
+A host that carves messages out of a body itself still faces the two date
+questions `threadToMessages` answers: what date a quoted message gets when its
+attribution line has none — or one that cannot be true — and where a message
+with no readable date sorts. Import the library's answers instead of copying
+them; both come from the React-free entry:
+
+```ts
+import { compareEpochMillis, quoteDate } from '@sarv-in/email-chat-view/transform';
+
+const turns = segments.map((segment, index) => {
+  // index: 0 is the carrier's own text, 1 the first quote beneath it, …
+  const { date, approx } = quoteDate(segment.sentAtMs ?? null, carrierMs, index);
+  return { ...toChatMessage(segment), date, ...(approx ? { dateApprox: true } : {}) };
+});
+turns.sort((a, b) => compareEpochMillis(a.date, b.date));
+```
+
+- **`quoteDate(readDate, carrierMillis, index)`** → `{ date, approx }` (type
+  `QuoteDate`). A read date at or before the carrier is taken as written. One
+  **later** than the carrier is a misparse — nothing is quoted before it is
+  written — so it is clamped: replaced, like a `null` read date, by
+  `carrierMillis - index` (one millisecond back per quote level, so the levels
+  keep their newest-to-oldest order) with `approx: true`, which is what
+  `dateApprox` is for. A carrier with no readable date (`NaN`) cannot contradict
+  anything, so the read date stands; with neither readable the date is `NaN`.
+  Pass `null`, not `NaN`, for a read date you could not parse — only `null`
+  triggers the inference.
+- **`compareEpochMillis(left, right)`** is the transforms' sort comparator:
+  oldest first, `NaN` dates **last**, two `NaN`s equal (chain your own tiebreak
+  if a stable sort's input order is not the one you want). Only `NaN` counts as
+  unreadable, so normalize first — a raw `0` sorts as 1970, see
+  [Dates](#dates-say-which-unit-you-have).
+
+Both are the exact functions the transforms call, so a bubble you date and
+sort with them lands where `threadToMessages` would have put it.
+
 ---
 
 ## Per-bubble actions: menus, star, reply
@@ -886,6 +924,8 @@ view is root-only: importing it pulls in React.
 | `threadToMessages(mails, options?)` | the same, but the messages quoted INSIDE those mails become bubbles too |
 | `createSegmentCache(capacity?)` | LRU memo for split bodies, keyed on `(id, body)` |
 | `contentKey(html)` | the normalized key two copies of one message collapse on |
+| `compareEpochMillis(left, right)` | the transforms' sort comparator: oldest first, unreadable (`NaN`) dates last — see [Dating and ordering them](#dating-and-ordering-them-the-way-the-library-does) |
+| `quoteDate(readDate, carrierMillis, index)` | date a quoted message the way `threadToMessages` does → `QuoteDate` `{ date, approx }`, clamped to the carrier |
 | `cleanReplyBody(html, options?)` | all seven passes, one parse → `{ html, applied }` |
 | `stripSignature` / `stripBanner` / `stripQuote` / `stripLines` / `stripSignOff` / `stripMarkers` / `stripDisclaimer` | one family each, for a corpus that wants six of the seven |
 
