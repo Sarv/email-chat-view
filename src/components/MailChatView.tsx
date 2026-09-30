@@ -64,6 +64,19 @@ export interface MailChatViewProps {
    * message, so keep it cheap — read a `Set`, don't scan the mailbox.
    */
   blockRemoteImages?: boolean | ((message: ChatMessage) => boolean);
+  /**
+   * The reader clicked "Load images" on a bubble. That bubble's own images
+   * load first, whatever the host does; this is where a client with a "load
+   * images from this sender" allowlist remembers the sender — and, by
+   * answering `blockRemoteImages` differently from then on, lets every other
+   * bubble from them on screen load too. That takes a re-render: the predicate
+   * is only asked again when this view renders, and it does not watch the
+   * host's list, so remember into state (or pass a new predicate), not into a
+   * `Set` mutated in place. Omit it and the click loads that one bubble and is
+   * reported to nobody. See
+   * {@link ChatBubbleProps.onLoadRemoteImages}.
+   */
+  onLoadRemoteImages?: (message: ChatMessage) => void;
   onOpenLink?: (url: string) => void;
   onRetryBody?: (message: ChatMessage) => void;
   onPreviewAttachment?: (attachment: Attachment, message: ChatMessage) => void;
@@ -83,7 +96,7 @@ export interface MailChatViewProps {
   renderQuickActions?: (message: ChatMessage) => ReactNode;
   /**
    * Per-message marks beside the timestamp: a security shield, a verified tick.
-   * Renders on a run follower too, which has no header of its own — see
+   * Renders on a run follower too, after the time on its slim header — see
    * {@link ChatBubbleProps.renderHeaderMeta}.
    */
   renderHeaderMeta?: (message: ChatMessage) => ReactNode;
@@ -117,6 +130,7 @@ export function MailChatView({
   parser,
   senderRunWindowMs = DEFAULT_SENDER_RUN_MS,
   blockRemoteImages,
+  onLoadRemoteImages,
   onOpenLink,
   onRetryBody,
   onPreviewAttachment,
@@ -326,6 +340,7 @@ export function MailChatView({
                       ? blockRemoteImages(message)
                       : blockRemoteImages
                   }
+                  onLoadRemoteImages={onLoadRemoteImages}
                   onOpenLink={onOpenLink}
                   onRetryBody={onRetryBody}
                   onPreviewAttachment={onPreviewAttachment}

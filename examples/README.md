@@ -12,7 +12,7 @@ pnpm build            # the runnable examples import ../../dist
 | --- | --- | --- |
 | [`node-transform/thread-to-chat.mjs`](./node-transform/thread-to-chat.mjs) | a thread → chat messages in Node: injected parser, `dateUnit`, the body cache, a still-downloading body | `node examples/node-transform/thread-to-chat.mjs` |
 | [`custom-rules/acme-signature.mjs`](./custom-rules/acme-signature.mjs) | adding a rule for a client we do not know, adding a German marker, and dropping a shipped rule that is too loose | `node examples/custom-rules/acme-signature.mjs` |
-| [`react-thread/MailThread.tsx`](./react-thread/MailThread.tsx) | the view wired the way a mail client actually loads a thread: streaming bodies, visible-range prioritisation, upward paging, host-owned side effects | copy into your app |
+| [`react-thread/MailThread.tsx`](./react-thread/MailThread.tsx) | the view wired the way a mail client actually loads a thread: streaming bodies, visible-range prioritisation, upward paging, a per-sender image allowlist, host-owned side effects | copy into your app |
 
 The two runnable files import from `../../dist` so they work straight from a
 checkout. **In your own app the import is the package specifier:**

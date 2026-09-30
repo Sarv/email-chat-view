@@ -113,7 +113,10 @@ export interface ChatBubbleProps {
   color?: SenderColor;
   /** Right-align this bubble. Defaults to the message's own `isFromMe`. */
   mine?: boolean;
-  /** A follow-up in a sender run: no avatar, no header, no tail corner. */
+  /**
+   * A follow-up in a sender run: no avatar, no tail corner, and a slim header
+   * — the time and `renderHeaderMeta`, without the sender or recipients.
+   */
   compact?: boolean;
   /** Partial label overrides; see {@link ViewLabels}. */
   labels?: Partial<ViewLabels>;
@@ -158,6 +161,17 @@ export interface ChatBubbleProps {
    * handled with `preventDefault()`.
    */
   onMessageMenu?: (message: ChatMessage, request: MessageMenuRequest) => boolean | void;
+  /**
+   * The reader clicked this bubble's "Load images" banner. The bubble's own
+   * images are let through FIRST, whatever the host then does — this is the
+   * host's chance to act on the click beyond this one body: remember the
+   * sender so their future mail loads images on its own, and turn
+   * `blockRemoteImages` off for their other bubbles already on screen.
+   *
+   * Omit it and the banner behaves exactly as before: that one bubble loads,
+   * nothing is reported.
+   */
+  onLoadRemoteImages?: (message: ChatMessage) => void;
   /** Controls shown at the bubble's outer edge on hover: menus, star, retry. */
   renderActions?: (message: ChatMessage) => ReactNode;
   /**
@@ -180,11 +194,11 @@ export interface ChatBubbleProps {
    * is this from, and when" — a mark that qualifies the answer belongs on that
    * line, not under the body where it reads as part of the message.
    *
-   * A follow-up in a sender run has no header, and this still renders: the
-   * bubble grows a meta-only row in its place. The header is dropped because
-   * sender and time are INHERITED from the run's first bubble; a per-message
-   * judgement is not, and silently dropping one is how a reader comes to
-   * believe every message in a run was vouched for.
+   * A follow-up in a sender run still gets it, on its slim header after its
+   * own time. The sender and recipients are dropped there because they are
+   * INHERITED from the run's first bubble; a per-message judgement is not,
+   * and silently dropping one is how a reader comes to believe every message
+   * in a run was vouched for.
    */
   renderHeaderMeta?: (message: ChatMessage) => ReactNode;
   /**
@@ -214,6 +228,7 @@ export function ChatBubble({
   onPreviewAttachment,
   onDownloadAttachment,
   onMessageMenu,
+  onLoadRemoteImages,
   renderActions,
   renderQuickActions,
   renderHeaderMeta,
@@ -248,6 +263,21 @@ export function ChatBubble({
   const senderLabel = displayNameFor(message.fromAddress, message.fromName);
   const recipientSummary = describeRecipients(recipients, resolvedLabels);
   const timestamp = bubbleTimestamp(message.date, message.dateApprox, resolvedLabels, locale, now);
+  // One element for both headers, so a run follower's time can never disagree
+  // with a full header's about format, zone or the approximate-date tilde.
+  const timeNode = timestamp.text ? (
+    <time
+      className="sec-head__time"
+      // Safe unguarded: a date this machine cannot read produces an empty
+      // `timestamp` above, and then this element is not rendered at all.
+      // Machine-readable form is always UTC; the visible text next to it is
+      // the reader's own zone.
+      dateTime={new Date(message.date).toISOString()}
+      title={timestamp.title}
+    >
+      {timestamp.text}
+    </time>
+  ) : null;
 
   // Wrapped by the library rather than by the host so the header can align it:
   // `.sec-head` sits on a baseline, and an icon handed straight into that line
@@ -377,6 +407,7 @@ export function ChatBubble({
         onOpenLink={onOpenLink}
         onRetryBody={onRetryBody}
         onFrameMenu={frameMenu}
+        onLoadRemoteImages={onLoadRemoteImages}
       />
 
       {attachments.length ? (
@@ -410,7 +441,19 @@ export function ChatBubble({
       />
       <div className={`sec-col${hug ? ' sec-col--hug' : ''}`} onContextMenu={handleContextMenu}>
         {compact ? (
-          metaNode && <div className="sec-head sec-head--meta-only">{metaNode}</div>
+          // A run follower's slim header: its own time, then its own marks.
+          // The sender and recipients are the run's and are not repeated. The
+          // time is NOT the run's — a message sent twice a minute apart is two
+          // events — and without it the follower's marks floated alone above
+          // the bubble, which read as a broken row. Nothing to show (no
+          // readable date, no marks) renders nothing, not an empty line that
+          // would reopen the gap the run closed.
+          (timeNode || metaNode) && (
+            <div className="sec-head sec-head--run">
+              {timeNode}
+              {metaNode}
+            </div>
+          )
         ) : (
           <div className="sec-head">
             <Tooltip
@@ -434,19 +477,7 @@ export function ChatBubble({
                 </span>
               ) : null}
             </Tooltip>
-            {timestamp.text ? (
-              <time
-                className="sec-head__time"
-                // Safe unguarded: a date this machine cannot read produces an
-                // empty `timestamp` above, and then this element is not
-                // rendered at all. Machine-readable form is always UTC; the
-                // visible text next to it is the reader's own zone.
-                dateTime={new Date(message.date).toISOString()}
-                title={timestamp.title}
-              >
-                {timestamp.text}
-              </time>
-            ) : null}
+            {timeNode}
             {metaNode}
           </div>
         )}

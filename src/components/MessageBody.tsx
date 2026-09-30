@@ -38,6 +38,11 @@ export interface MessageBodyProps {
    * listens there.
    */
   onFrameMenu?: (request: MessageMenuRequest) => boolean | void;
+  /**
+   * The reader clicked "Load images" on this body — see
+   * `SandboxedBodyProps.onFrameLoadImages`, which this binds to `message`.
+   */
+  onLoadRemoteImages?: (message: ChatMessage) => void;
 }
 
 export function MessageBody({
@@ -48,6 +53,7 @@ export function MessageBody({
   onOpenLink,
   onRetryBody,
   onFrameMenu,
+  onLoadRemoteImages,
 }: MessageBodyProps) {
   const inlineHtml = useMemo(
     // `shape.html`, never `message.body`: the shape carries the body with its
@@ -70,6 +76,12 @@ export function MessageBody({
       onOpenLink?.(href);
     },
     [onOpenLink],
+  );
+
+  // Undefined without a handler, so the frame has nobody to tell.
+  const frameLoadImages = useMemo(
+    () => (onLoadRemoteImages ? () => onLoadRemoteImages(message) : undefined),
+    [onLoadRemoteImages, message],
   );
 
   if (!message.body && message.bodyPending) {
@@ -104,6 +116,7 @@ export function MessageBody({
         hasRemoteImages={shape.hasRemoteImages}
         onOpenLink={onOpenLink}
         onFrameMenu={onFrameMenu}
+        onFrameLoadImages={frameLoadImages}
       />
     );
   }

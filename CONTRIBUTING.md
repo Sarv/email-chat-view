@@ -327,7 +327,7 @@ rendering anything.
 | `components/MailChatView.tsx` | the composed thread: separators, runs, colours, scroll anchoring, the DOM ceiling, visible-range reporting |
 | `components/ChatBubble.tsx` | one message. Exported on its own for hosts with their own list |
 | `components/MessageBody.tsx` | the five body states — content, pending, failed, empty, quoted-only |
-| `components/SandboxedBody.tsx` | the iframe wiring for a rich body — measurement, and the link and right-click listeners on the frame's own document |
+| `components/SandboxedBody.tsx` | the iframe wiring for a rich body — measurement, the link and right-click listeners on the frame's own document, and the "Load images" banner, whose click is reported to the host |
 | `components/use-latest.ts` | `useLatest`, the ref an effect reads a host callback through so it never has to depend on one. Internal, not exported |
 | `components/AttachmentChip.tsx` | one attachment chip; reports clicks, never fetches |
 | `components/Avatar.tsx`, `DateSeparator.tsx`, `ChatSkeleton.tsx`, `Tooltip.tsx`, `icons.tsx` | the primitives. Icons are traced inline rather than imported from a library |
@@ -337,6 +337,7 @@ rendering anything.
 | Path | What it is |
 | --- | --- |
 | `src/styles/index.css` | the `--sec-*` token layer, compiled to `dist/style.css` |
+| `CHANGELOG.md` | what changed in each release, written for a host upgrading — a behaviour or class-name change a host could trip over goes here |
 | `test/` | one file per module, mirroring `src/`; `test/helpers/` holds the linkedom parser, message fixtures and observer stubs |
 | `examples/` | runnable Node examples and a React reference integration, type-checked with the rest — see [Examples](#examples) |
 | `scripts/media/` | the README media generators: `thread.mjs` is the demo thread, `render.mjs` draws the GIF and stills, `actions.mjs` draws the render-slot callouts, `chrome.mjs` is the shared headless-Chrome shooter and `dom-globals.mjs` the jsdom globals both need — see [README media](#readme-media) |

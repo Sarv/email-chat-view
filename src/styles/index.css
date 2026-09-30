@@ -212,7 +212,7 @@
 
 /* A follow-up inside a sender run sits tight against the message above it —
    that gap difference is the only thing telling the reader the two belong
-   together, since the run has no repeated avatar or header to say so. */
+   together, since the run has no repeated avatar or name to say so. */
 .sec-item--run {
   margin-block-start: var(--sec-gap-sm);
 }
@@ -378,11 +378,22 @@
   line-height: 1;
 }
 
-/* A run follower has no header, only these marks. Nothing to sit beside, so
-   the row carries just enough height for the icon and none of the header's
-   own spacing. */
-.sec-head--meta-only {
-  padding-block-start: 2px;
+/* A run follower's slim header: its own time, then its own marks — no avatar,
+   no sender, no recipients, which the run's first bubble already gave. It is
+   a `.sec-head`, so it takes the header's small muted type, its inline
+   padding (the time lines up with the full header's sender above it) and its
+   mirroring on the reader's own rows, from the same tokens in either scheme.
+   The one difference is height: set solid, so the run stays tight — the gap
+   between a run's bubbles is the only thing saying they belong together.
+   Set solid, the time's line box is shorter than a host's icon, so the row is
+   centred rather than left on the header's baseline: on a baseline the time
+   rides at the top of the row while the mark (`align-self: center`) sits in
+   its middle, a couple of pixels lower. The full header does not show this
+   with a meta-sized icon, because its unset line box is already as tall as
+   one (16.5px at the default 11px × 1.5). */
+.sec-head--run {
+  align-items: center;
+  line-height: 1;
 }
 
 /* -------------------------------------------------------------- bubble --- */

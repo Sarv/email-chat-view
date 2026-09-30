@@ -702,5 +702,124 @@ describe('SandboxedBody', () => {
         'img-src data: cid: https: http:',
       );
     });
+
+    describe('telling the host', () => {
+      const html = '<img src="https://x.example/p.gif">';
+
+      // Regression: found in Sarv Inbox. The banner told nobody, so a host that
+      // remembers senders never heard of the click: this bubble loaded, the
+      // sender was not remembered, and their next mail was blocked again.
+      it('reports the click once this frame’s own images are let through', () => {
+        const onFrameLoadImages = vi.fn();
+        const { container } = render(
+          <SandboxedBody
+            html={html}
+            labels={DEFAULT_LABELS}
+            hasRemoteImages
+            onFrameLoadImages={onFrameLoadImages}
+          />,
+        );
+        expect(onFrameLoadImages).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
+        expect(onFrameLoadImages).toHaveBeenCalledTimes(1);
+        expect(onFrameLoadImages).toHaveBeenCalledWith();
+        expect(frameOf(container).getAttribute('srcdoc')).toContain(
+          'img-src data: cid: https: http:',
+        );
+      });
+
+      // Regression: the reader asked for THESE images. A host whose bookkeeping
+      // fails — a storage write that throws — must not cost them that, so the
+      // frame is unblocked before the host is called, never after.
+      it('lets the images through even when the host’s callback throws', () => {
+        // React rethrows a handler's error out of its root listener, and jsdom
+        // reports that as an uncaught window error. Caught here, so the suite
+        // sees the frame's behaviour rather than an unhandled-error failure.
+        const swallow = (event: ErrorEvent) => event.preventDefault();
+        window.addEventListener('error', swallow);
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        try {
+          const { container } = render(
+            <SandboxedBody
+              html={html}
+              labels={DEFAULT_LABELS}
+              hasRemoteImages
+              onFrameLoadImages={() => {
+                throw new Error('allowlist write failed');
+              }}
+            />,
+          );
+          fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
+          expect(frameOf(container).getAttribute('srcdoc')).toContain(
+            'img-src data: cid: https: http:',
+          );
+        } finally {
+          window.removeEventListener('error', swallow);
+          consoleError.mockRestore();
+        }
+      });
+
+      // Regression: hosts pass inline arrow functions, a new identity every
+      // render. The callback is read at click time, so a re-render neither
+      // rebuilds the frame nor leaves the banner calling the stale function.
+      it('calls the latest callback without rebuilding the frame for a new one', () => {
+        const [first, second] = [vi.fn(), vi.fn()];
+        const { container, rerender } = render(
+          <SandboxedBody
+            html={html}
+            labels={DEFAULT_LABELS}
+            hasRemoteImages
+            onFrameLoadImages={first}
+          />,
+        );
+        const frame = frameOf(container);
+        const before = frame.getAttribute('srcdoc');
+
+        rerender(
+          <SandboxedBody
+            html={html}
+            labels={DEFAULT_LABELS}
+            hasRemoteImages
+            onFrameLoadImages={second}
+          />,
+        );
+        expect(frameOf(container)).toBe(frame);
+        expect(frame.getAttribute('srcdoc')).toBe(before);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
+        expect(second).toHaveBeenCalledTimes(1);
+        expect(first).not.toHaveBeenCalled();
+      });
+
+      // Regression: a host usually answers the click by unblocking the sender,
+      // which turns `blockRemoteImages` off for this very bubble a render
+      // later. The frame is already unblocked, so that must not load it again.
+      it('does not reload when the host answers by unblocking this bubble', () => {
+        const { container, rerender } = render(
+          <SandboxedBody
+            html={html}
+            labels={DEFAULT_LABELS}
+            hasRemoteImages
+            onFrameLoadImages={() => undefined}
+          />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
+        const frame = frameOf(container);
+        const unblocked = frame.getAttribute('srcdoc');
+
+        rerender(
+          <SandboxedBody
+            html={html}
+            labels={DEFAULT_LABELS}
+            hasRemoteImages
+            blockRemoteImages={false}
+            onFrameLoadImages={() => undefined}
+          />,
+        );
+        expect(frameOf(container)).toBe(frame);
+        expect(frame.getAttribute('srcdoc')).toBe(unblocked);
+      });
+    });
   });
 });

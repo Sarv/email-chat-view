@@ -127,17 +127,65 @@ describe('ChatBubble', () => {
     expect(container.querySelector('.sec-row')?.className).toContain('sec-row--mine');
   });
 
-  // Regression: a follow-up in a sender run drops the avatar and the header,
-  // but the avatar's SPACE has to stay or every bubble after the first steps
-  // out of the run's column. The tail corner goes too — that is what makes a
-  // run read as one utterance rather than three.
-  it('drops the header and the tail for a follow-up in a run', () => {
+  // CHANGED BEHAVIOUR (was: 'drops the header and the tail for a follow-up in
+  // a run', which asserted no header at all). A follower now keeps a slim
+  // header with its own time: with none, the same message sent twice a minute
+  // apart showed as a second bubble with no time and no sender — and with the
+  // host's shield floating alone above it — which read as a broken row.
+  //
+  // Regression: the follower still drops the avatar, the sender and the
+  // recipients, which the run's first bubble already gave; but the avatar's
+  // SPACE has to stay or every bubble after the first steps out of the run's
+  // column. The tail corner goes too — that is what makes a run read as one
+  // utterance rather than three.
+  it('keeps only its own time, and drops the name and the tail, for a follow-up in a run', () => {
     const { container } = render(
       <ChatBubble message={chatMessage()} compact labels={DEFAULT_LABELS} {...FIXED} />,
     );
-    expect(container.querySelector('.sec-head')).toBeNull();
+    const head = container.querySelector('.sec-head') as HTMLElement;
+    expect(head.className).toBe('sec-head sec-head--run');
+    expect([...head.children].map((child) => child.className)).toEqual(['sec-head__time']);
+    expect(head.textContent).toBe('10:00');
+    expect(container.querySelector('.sec-head__who')).toBeNull();
+    expect(container.querySelector('.sec-head__sender')).toBeNull();
+    expect(container.querySelector('.sec-head__to')).toBeNull();
     expect(container.querySelector('.sec-avatar--spacer')).not.toBeNull();
     expect(container.querySelector('.sec-bubble')?.className).not.toContain('sec-bubble--tail');
+  });
+
+  // Regression: the follower's time must be the full header's time element,
+  // not a second copy of it — a copy is how the two come to disagree about
+  // the zone, the format or the `~` on an inferred date, and a run then reads
+  // as if its messages were sent at times they were not.
+  it('marks up a follow-up’s time exactly as a full header does', () => {
+    for (const message of [chatMessage(), chatMessage({ dateApprox: true })]) {
+      const full = render(<ChatBubble message={message} labels={DEFAULT_LABELS} {...FIXED} />);
+      const expected = (full.container.querySelector('time') as HTMLTimeElement).outerHTML;
+      full.unmount();
+      const follower = render(
+        <ChatBubble message={message} compact labels={DEFAULT_LABELS} {...FIXED} />,
+      );
+      expect(
+        (follower.container.querySelector('.sec-head--run time') as HTMLElement).outerHTML,
+      ).toBe(expected);
+      follower.unmount();
+    }
+  });
+
+  // Regression: with no readable date and no marks there is nothing to put on
+  // the follower's header, and an empty one is a blank line above the bubble
+  // that reopens the gap the run closed.
+  it('renders no header on a follow-up with no readable time and no marks', () => {
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage({ date: Number.NaN })}
+        compact
+        labels={DEFAULT_LABELS}
+        renderHeaderMeta={() => null}
+        {...FIXED}
+      />,
+    );
+    expect(container.querySelector('.sec-head')).toBeNull();
   });
 
   // Regression: a framed body needs a sized containing block, so its bubble
@@ -902,11 +950,15 @@ describe('ChatBubble', () => {
     );
   });
 
-  // Regression: a run follower drops its header because sender and time are
-  // INHERITED from the run's first bubble. A per-message judgement is not, so
-  // it still renders — in a row of its own. Drop it silently and a reader
-  // comes to believe every message in a run carried the mark the first one did.
-  it('keeps the header meta on a follow-up in a run', () => {
+  // Regression: a run follower drops its sender because that is INHERITED
+  // from the run's first bubble. A per-message judgement is not, so it still
+  // renders. Drop it silently and a reader comes to believe every message in a
+  // run carried the mark the first one did.
+  //
+  // CHANGED BEHAVIOUR: the mark used to sit alone on a `--meta-only` row with
+  // no time, and a shield floating by itself above a bubble read as a broken
+  // header. It now follows the follower's own time, as on a full header.
+  it('keeps the header meta on a follow-up in a run, after its own time', () => {
     const { container } = render(
       <ChatBubble
         message={chatMessage()}
@@ -917,16 +969,36 @@ describe('ChatBubble', () => {
       />,
     );
     const head = container.querySelector('.sec-head') as HTMLElement;
-    expect(head.className).toBe('sec-head sec-head--meta-only');
-    expect(head.querySelector('.host-shield')).not.toBeNull();
-    // Still no sender and no time — the row carries the mark and nothing else.
+    expect(head.className).toBe('sec-head sec-head--run');
+    expect([...head.children].map((child) => child.className)).toEqual([
+      'sec-head__time',
+      'sec-head__meta',
+    ]);
+    expect(head.querySelector('.sec-head__meta .host-shield')).not.toBeNull();
+    // Still no sender — the time and the mark, nothing the run already said.
     expect(head.querySelector('.sec-head__sender')).toBeNull();
-    expect(head.querySelector('.sec-head__time')).toBeNull();
+  });
+
+  // Regression: an unreadable date must not cost a follower its marks — the
+  // judgement matters most on exactly the mail whose headers are malformed.
+  it('keeps a follow-up’s marks when its time cannot be read', () => {
+    const { container } = render(
+      <ChatBubble
+        message={chatMessage({ date: Number.NaN })}
+        compact
+        labels={DEFAULT_LABELS}
+        renderHeaderMeta={() => <i className="host-shield">shield</i>}
+        {...FIXED}
+      />,
+    );
+    const head = container.querySelector('.sec-head--run') as HTMLElement;
+    expect([...head.children].map((child) => child.className)).toEqual(['sec-head__meta']);
+    expect(head.querySelector('time')).toBeNull();
   });
 
   // Regression: a host that has nothing to say about THIS message returns
-  // nothing, and must not get an empty wrapper for it — on a run follower that
-  // would be a blank row above the bubble, opening the gap the run closed.
+  // nothing, and must not get an empty wrapper for it — an empty flex item on
+  // the header line is a stray gap beside the time.
   it('renders no meta element when the host returns nothing', () => {
     const { container } = render(
       <ChatBubble
@@ -937,8 +1009,9 @@ describe('ChatBubble', () => {
         {...FIXED}
       />,
     );
-    expect(container.querySelector('.sec-head')).toBeNull();
     expect(container.querySelector('.sec-head__meta')).toBeNull();
+    // The follower's time is still there: the header is the time's, not the mark's.
+    expect(container.querySelector('.sec-head--run')?.textContent).toBe('10:00');
   });
 
   it('takes a class from its host', () => {
@@ -967,6 +1040,31 @@ describe('ChatBubble', () => {
     );
     fireEvent.click(container.querySelector('a') as HTMLElement);
     expect(onOpenLink).toHaveBeenCalledWith('https://x.example/a');
+  });
+
+  // Regression: found in Sarv Inbox. The bubble drew its own "Load images"
+  // banner and told nobody, so a host with a per-sender allowlist never
+  // learned of the click: that one bubble loaded, the sender was never
+  // remembered, and their next mail was blocked again.
+  it('tells the host which message the reader loaded images for', () => {
+    const onLoadRemoteImages = vi.fn();
+    const message = chatMessage({
+      body: '<table><tr><td><img src="https://cdn.example/logo.png" alt="logo"></td></tr></table>',
+    });
+    const { container } = render(
+      <ChatBubble
+        message={message}
+        labels={DEFAULT_LABELS}
+        onLoadRemoteImages={onLoadRemoteImages}
+        {...FIXED}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
+    expect(onLoadRemoteImages).toHaveBeenCalledTimes(1);
+    expect(onLoadRemoteImages).toHaveBeenCalledWith(message);
+    expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain(
+      'img-src data: cid: https: http:',
+    );
   });
 });
 

@@ -17,7 +17,12 @@
  *     client opens them in the browser, not in the message;
  *   - a right-click is reported to the host too, translated into the page's
  *     own coordinates, because an event inside the frame never reaches the
- *     host's DOM and the host has no other way to see it.
+ *     host's DOM and the host has no other way to see it;
+ *   - so is a click on the "Load images" banner, after this frame's own images
+ *     are let through: whether that click should also mean "trust this sender
+ *     from now on" is the host's policy, and a host that never hears about the
+ *     click cannot remember anything — the reader clicks, one bubble loads,
+ *     and the next mail from the same sender is blocked again.
  *
  * The listeners go on the frame's DOCUMENT, and that document is replaced on
  * every load, so they are attached per load — and the effect that owns them
@@ -73,6 +78,19 @@ export interface SandboxedBodyProps {
    * `onMessageMenu`.
    */
   onFrameMenu?: (request: MessageMenuRequest) => boolean | void;
+  /**
+   * The reader clicked this frame's "Load images" banner.
+   *
+   * Called AFTER the frame has been told to let its own images through, so a
+   * host that does nothing with it, or throws, never costs the reader the
+   * images they just asked for. What the click means beyond this one body —
+   * remembering the sender, say — is the host's decision. No message
+   * argument: this component renders html and knows no message; `MessageBody`
+   * and `ChatBubble` take `onLoadRemoteImages(message)` and bind it here.
+   * Named apart from theirs for that reason, as `onFrameMenu(request)` is
+   * from `onMessageMenu(message, request)`.
+   */
+  onFrameLoadImages?: () => void;
 }
 
 export function SandboxedBody({
@@ -82,6 +100,7 @@ export function SandboxedBody({
   hasRemoteImages = false,
   onOpenLink,
   onFrameMenu,
+  onFrameLoadImages,
 }: SandboxedBodyProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -89,6 +108,7 @@ export function SandboxedBody({
   // the attach effect must not depend on these.
   const openLinkRef = useLatest(onOpenLink);
   const frameMenuRef = useLatest(onFrameMenu);
+  const loadImagesRef = useLatest(onFrameLoadImages);
   // The document the listeners were last attached to, and the `srcDoc` it was
   // the load of — so a new `srcDoc` can tell the outgoing document from its
   // own. See the early attach at the end of the attach effect.
@@ -101,6 +121,17 @@ export function SandboxedBody({
 
   const blocked = blockRemoteImages && !imagesAllowed;
   const sanitized = useMemo(() => sanitizeFrameHtml(html), [html]);
+
+  const loadImages = useCallback(() => {
+    // This frame first, the host second. The state update is queued before
+    // the host runs, so a host callback that throws still leaves the reader
+    // with the images they clicked for. The host will usually answer by
+    // turning `blockRemoteImages` off for every bubble from this sender; here
+    // that changes nothing — `blocked` is already false — so this frame
+    // reloads once, not twice.
+    setImagesAllowed(true);
+    loadImagesRef.current?.();
+  }, [loadImagesRef]);
 
   // The frame inherits nothing from the page, so the host's tokens have to be
   // read out of the cascade and copied in. Read before the frame is rendered at
@@ -243,7 +274,7 @@ export function SandboxedBody({
         <div className="sec-note sec-note--images">
           <ImageOffIcon />
           <span className="sec-note__text">{labels.remoteImagesBlocked}</span>
-          <button type="button" className="sec-link-btn" onClick={() => setImagesAllowed(true)}>
+          <button type="button" className="sec-link-btn" onClick={loadImages}>
             {labels.loadImages}
           </button>
         </div>

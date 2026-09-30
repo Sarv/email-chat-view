@@ -158,6 +158,46 @@ describe('MessageBody', () => {
     });
   });
 
+  describe('the load-images banner', () => {
+    const body =
+      '<table><tr><td><img src="https://cdn.example/logo.png" alt="logo"></td></tr></table>';
+
+    // Regression: the frame knows no message, so the click has to be bound to
+    // THIS one on the way down. Lose it here and the host hears "someone
+    // loaded images" with no way to tell whose sender to remember.
+    it('reports the click with the message it belongs to', () => {
+      const onLoadRemoteImages = vi.fn();
+      const message = chatMessage({ body });
+      render(
+        <MessageBody
+          message={message}
+          shape={shapeOf(body)}
+          labels={DEFAULT_LABELS}
+          onLoadRemoteImages={onLoadRemoteImages}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
+      expect(onLoadRemoteImages).toHaveBeenCalledTimes(1);
+      expect(onLoadRemoteImages).toHaveBeenCalledWith(message);
+    });
+
+    // Regression: no handler must mean exactly the old banner — that body's
+    // images load, and nothing throws for want of someone to tell.
+    it('still loads that body’s images without a handler', () => {
+      const { container } = render(
+        <MessageBody
+          message={chatMessage({ body })}
+          shape={shapeOf(body)}
+          labels={DEFAULT_LABELS}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Load images' }));
+      expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain(
+        'img-src data: cid: https: http:',
+      );
+    });
+  });
+
   describe('link clicks', () => {
     const body = '<p>see <a href="https://x.example/a"><b>this</b></a> and <i>that</i></p>';
 

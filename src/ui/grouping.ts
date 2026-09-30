@@ -6,7 +6,8 @@
  *
  *   by DAY   -> the date separators between blocks
  *   by RUN   -> consecutive messages from one sender collapse into a run, and
- *               the follow-ups drop their avatar and header
+ *               the follow-ups drop their avatar and name, keeping a slim
+ *               header with just their own time and marks
  *
  * Both are plain functions over `ChatMessage[]`, which is what makes them
  * testable without rendering anything, and what lets a consumer reuse them to
@@ -38,8 +39,8 @@ function usableDate(dateMs: number | null | undefined): number {
  * Whether `next` continues `previous`'s run.
  *
  * Deliberately strict — every uncertainty answers "no", because a wrongly
- * merged run hides a header and so attributes one person's message to another,
- * whereas a wrongly split run merely repeats an avatar.
+ * merged run hides a sender's name and so attributes one person's message to
+ * another, whereas a wrongly split run merely repeats an avatar.
  */
 export function isSameSenderRun(
   previous: ChatMessage | null | undefined,

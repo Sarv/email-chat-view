@@ -11,7 +11,9 @@
  *     message rather than the whole thread;
  *   - every side effect (opening a link, saving an attachment, retrying) is the
  *     host's, because a component that reached for `window.open` or an Electron
- *     IPC channel of its own would work in exactly one application.
+ *     IPC channel of its own would work in exactly one application;
+ *   - so is remembering whose images the reader trusts: the view reports a
+ *     "Load images" click, and the host decides what it means from then on.
  */
 import { useCallback, useMemo, useState } from 'react';
 
@@ -20,6 +22,7 @@ import {
   MailChatView,
   mailsToMessages,
   type Attachment,
+  type ChatMessage,
   type Mail,
   type VisibleRange,
 } from '@sarv-in/email-chat-view';
@@ -38,6 +41,10 @@ export interface MailThreadProps {
   prioritizeBodies: (ids: readonly string[]) => void;
   /** Re-fetch one body that failed. */
   refetchBody: (id: string) => void;
+  /** Senders whose remote images load without asking, lower-cased. */
+  imageSenders: ReadonlySet<string>;
+  /** Remember one — persist it however your store does. */
+  allowImagesFrom: (address: string) => void;
 }
 
 export function MailThread({
@@ -47,6 +54,8 @@ export function MailThread({
   onLoadOlder,
   prioritizeBodies,
   refetchBody,
+  imageSenders,
+  allowImagesFrom,
 }: MailThreadProps) {
   const [loadingOlder, setLoadingOlder] = useState(false);
 
@@ -112,6 +121,26 @@ export function MailThread({
     console.log('download', attachment.filename);
   }, []);
 
+  /**
+   * Remote images: blocked unless the sender is on your allowlist. Called for
+   * every rendered message, so it reads a `Set` rather than scanning anything.
+   */
+  const blockImages = useCallback(
+    (message: ChatMessage) => !imageSenders.has(message.fromAddress.toLowerCase()),
+    [imageSenders],
+  );
+
+  /**
+   * The reader clicked "Load images" on a bubble. That bubble has already
+   * loaded its images; remembering the sender is what makes their NEXT mail
+   * load on its own — and, once `imageSenders` updates, every other bubble of
+   * theirs on screen loads too, because `blockImages` answers differently.
+   */
+  const handleLoadImages = useCallback(
+    (message: ChatMessage) => allowImagesFrom(message.fromAddress.toLowerCase()),
+    [allowImagesFrom],
+  );
+
   return (
     <MailChatView
       messages={messages}
@@ -126,6 +155,8 @@ export function MailThread({
       onOpenLink={handleOpenLink}
       onRetryBody={(message) => refetchBody(message.id)}
       onDownloadAttachment={handleDownload}
+      blockRemoteImages={blockImages}
+      onLoadRemoteImages={handleLoadImages}
       // Placeholder bubbles while the thread's metadata is still arriving —
       // they say what a spinner cannot: that a conversation is coming, roughly
       // this long, laid out this way.

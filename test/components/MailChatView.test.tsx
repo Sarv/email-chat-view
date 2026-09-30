@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MailChatView, type MailChatViewProps } from '../../src/components/MailChatView.js';
@@ -118,25 +119,56 @@ describe('MailChatView', () => {
     ];
 
     // Regression: three consecutive messages from one person, each with its own
-    // avatar and header, is what makes a mail thread NOT read as a chat.
+    // avatar and name, is what makes a mail thread NOT read as a chat.
+    //
+    // CHANGED BEHAVIOUR: the follower used to have no header at all (this
+    // asserted one `.sec-head`). It now keeps a slim one with its own time, so
+    // what is pinned is that the sender is named once and the follower's
+    // header is the slim kind.
     it('collapses a follow-up from the same sender', () => {
       const { container } = renderView({ messages: run });
       const items = bubblesIn(container);
       expect(items[0]?.className).toBe('sec-item');
       expect(items[1]?.className).toBe('sec-item sec-item--run');
-      expect(container.querySelectorAll('.sec-head')).toHaveLength(1);
+      expect(container.querySelectorAll('.sec-head__sender')).toHaveLength(1);
+      expect(items[1]?.querySelector('.sec-head')?.className).toBe('sec-head sec-head--run');
     });
 
     it('gives every message its own header when the host asks for one', () => {
       const { container } = renderView({ messages: run, senderRunWindowMs: 0 });
-      expect(container.querySelectorAll('.sec-head')).toHaveLength(2);
+      expect(container.querySelectorAll('.sec-head__sender')).toHaveLength(2);
+      expect(container.querySelector('.sec-head--run')).toBeNull();
     });
 
-    // Regression: the header a run collapses carries sender and time, both
-    // inherited from the bubble above. A host's per-message mark — a security
-    // shield, a verified tick — is not inherited, so it has to reach EVERY
-    // bubble in the run. One mark on the first of three is how a reader learns
-    // to read the whole run as vouched for.
+    // Regression: found in Sarv Inbox. A sender who sends the same message
+    // twice gets two bubbles — both really arrived, and the plain mail view
+    // shows both — and the second is a run follower. It used to show no time
+    // and no name, only the host's shield alone above it, which read as a
+    // broken copy. It must carry its own time, with the shield after it.
+    it('gives a message sent twice its own time on the second bubble', () => {
+      const body = '<p>Please find the statement attached.</p>';
+      const { container } = renderView({
+        messages: [
+          chatMessage({ id: 'first', body, date: TODAY_AT_TEN }),
+          chatMessage({ id: 'again', body, date: TODAY_AT_TEN + 60_000 }),
+        ],
+        renderHeaderMeta: () => <i className="host-shield">shield</i>,
+      });
+      const items = bubblesIn(container);
+      expect(items).toHaveLength(2);
+      const second = items[1]?.querySelector('.sec-head--run') as HTMLElement;
+      expect(second.querySelector('time')?.textContent).toBe('10:01');
+      expect([...second.children].map((child) => child.className)).toEqual([
+        'sec-head__time',
+        'sec-head__meta',
+      ]);
+    });
+
+    // Regression: the name a run collapses is inherited from the bubble above.
+    // A host's per-message mark — a security shield, a verified tick — is not
+    // inherited, so it has to reach EVERY bubble in the run. One mark on the
+    // first of three is how a reader learns to read the whole run as vouched
+    // for.
     it('passes the host’s header meta to every bubble in a run', () => {
       const { container } = renderView({
         messages: run,
@@ -583,6 +615,56 @@ describe('MailChatView', () => {
       expect(notes).toHaveLength(1);
       // And it is the bubble whose sender was NOT allowlisted that carries it.
       expect(notes[0]?.closest('[data-sec-index]')?.getAttribute('data-sec-index')).toBe('1');
+    });
+
+    // Regression: found in Sarv Inbox. The view is how the host reaches the
+    // bubbles, and "Load images" in the chat view never reached it: the
+    // sender was never remembered, so the reader clicked it again on every
+    // mail from them.
+    it('reports a "Load images" click with the message it was on', () => {
+      const onLoadRemoteImages = vi.fn();
+      renderView({ messages: remoteImageThread, onLoadRemoteImages });
+      const buttons = screen.getAllByRole('button', { name: 'Load images' });
+      expect(buttons).toHaveLength(2);
+
+      fireEvent.click(buttons[1] as HTMLElement);
+      expect(onLoadRemoteImages).toHaveBeenCalledTimes(1);
+      expect(onLoadRemoteImages).toHaveBeenCalledWith(remoteImageThread[1]);
+    });
+
+    // Regression: the round trip a remembering host makes. It answers the click
+    // by blocking nothing from that sender any more, and every OTHER bubble
+    // from them on screen loads at once — not just the one that was clicked.
+    it('lets the host unblock the sender’s other bubbles in answer', () => {
+      const sameSender = remoteImageThread.map((message) => ({
+        ...message,
+        fromAddress: 'alerts@bank.example',
+      }));
+      const allowed = new Set<string>();
+      function Host() {
+        const [, setVersion] = useState(0);
+        return (
+          <MailChatView
+            messages={sameSender}
+            senderRunWindowMs={0}
+            locale="en-GB"
+            now={NOW}
+            blockRemoteImages={(message) => !allowed.has(message.fromAddress)}
+            onLoadRemoteImages={(message) => {
+              allowed.add(message.fromAddress);
+              setVersion((version) => version + 1);
+            }}
+          />
+        );
+      }
+      const { container } = render(<Host />);
+      expect(container.querySelectorAll('.sec-note--images')).toHaveLength(2);
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Load images' })[0] as HTMLElement);
+      expect(container.querySelectorAll('.sec-note--images')).toHaveLength(0);
+      for (const frame of container.querySelectorAll('iframe')) {
+        expect(frame.getAttribute('srcdoc')).toContain('img-src data: cid: https: http:');
+      }
     });
   });
 });

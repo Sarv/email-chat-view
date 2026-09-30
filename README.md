@@ -378,7 +378,7 @@ and correctly revealed:
 | `renderActions(message)` | at the bubble's **outer edge**, outside the bubble box — left of your own messages, right of everyone else's. Hidden at `opacity: 0`, revealed on row `:hover` **and on `:focus-within`**, so it is reachable by keyboard, not just by mouse |
 | `renderQuickActions(message)` | on the bubble's **bottom inline-end corner** (bottom right in a left-to-right page) of every bubble — your own and everyone else's, a two-word reply and a framed document alike — **straddling the bottom edge**, so on a one-line reply it sits in the bubble's padding rather than over its words. For one-click actions: reply, reply all, forward. Revealed exactly like `renderActions`: row `:hover` and `:focus-within`, the same fade, none under `prefers-reduced-motion` |
 | `renderFooter(message)` | **inside** the column, below the body — for something that belongs to the message rather than acting on it: an inline reply box, a translation notice, an extraction warning |
-| `renderHeaderMeta(message)` | on the **header line, after the timestamp** — for a mark that qualifies the message itself: a security shield, a verified-sender tick, a label. A follow-up in a sender run has no header and still gets it, in a row of its own: sender and time are inherited from the bubble above, a per-message judgement is not |
+| `renderHeaderMeta(message)` | on the **header line, after the timestamp** — for a mark that qualifies the message itself: a security shield, a verified-sender tick, a label. A follow-up in a sender run gets it too, after its own time on its slim header (see below): the sender is inherited from the bubble above, a per-message judgement is not |
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Sarv/email-chat-view/main/docs/media/render-slots.png"
@@ -437,6 +437,22 @@ A few things about the cluster a host styling it should know:
   sits `--sec-quick-inset` plus the overhang (about 26px by default) in from the
   corner you see.
 
+**Sender runs.** Consecutive messages from one sender inside
+`senderRunWindowMs` (five minutes by default) form a run. The first bubble has
+the full header; each follow-up drops the avatar (its space stays, so the run
+lines up), the sender's name, the recipients and the tail corner, and keeps a
+**slim header** — `.sec-head.sec-head--run` — holding just its own `<time>`
+(the same element, format and tooltip as a full header's, `~` for an inferred
+date included) followed by your `renderHeaderMeta` marks. The time stays
+because it is not the run's: the same message sent twice a minute apart is two
+bubbles, and the second one needs its own time, not a shield floating alone
+above it. The slim header is set solid and centred rather than on a baseline,
+so a 16px mark sits level with the time, as it does on a full header. A
+follow-up with no readable date and no marks renders no header at all. Before
+0.2.7 a follow-up had no header, only a `.sec-head--meta-only` row
+when there were marks; a host that styled that class should move the rule to
+`.sec-head--run`.
+
 ### Right-click: your own context menu
 
 `onMessageMenu(message, request)` fires on a right-click **anywhere in a
@@ -481,10 +497,12 @@ parts, `MessageBody` and `SandboxedBody`, take `onFrameMenu(request)` for the
 frame alone, because an inline body is ordinary DOM whose right-click reaches
 any ancestor's `onContextMenu`.
 
-Four more callbacks cover the affordances the view *does* draw, because it knows
+Five more callbacks cover the affordances the view *does* draw, because it knows
 when they were clicked and you know what to do about it: `onOpenLink`,
-`onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment`. The library never
-fetches, never navigates and never mutates anything — it reports, you act.
+`onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment` and
+`onLoadRemoteImages` (the "Load images" banner — see `blockRemoteImages` under
+[View](#view)). The library never fetches, never navigates and never mutates
+anything — it reports, you act.
 
 ---
 
@@ -496,7 +514,7 @@ Working code for each of the three ways this gets used, in [`examples/`](./examp
 | --- | --- |
 | [`node-transform`](./examples/node-transform/thread-to-chat.mjs) | a thread → chat messages in Node — injected parser, `dateUnit`, the body cache, a pending body |
 | [`custom-rules`](./examples/custom-rules/acme-signature.mjs) | adding a rule for an unknown client, adding a German marker, dropping a shipped rule that is too loose |
-| [`react-thread`](./examples/react-thread/MailThread.tsx) | the view wired like a real mail client — streaming bodies, visible-range prioritisation, upward paging |
+| [`react-thread`](./examples/react-thread/MailThread.tsx) | the view wired like a real mail client — streaming bodies, visible-range prioritisation, upward paging, a per-sender image allowlist |
 
 The first two run straight from a clone:
 
@@ -1023,7 +1041,7 @@ they are not on the `/transform` entry.
 | --- | --- |
 | **Data** | `messages` (the only required one), `currentUserAddress`, `locale`, `now`, `parser` |
 | **Your UI** | `renderActions(message)`, `renderQuickActions(message)`, `renderFooter(message)`, `renderHeaderMeta(message)`, `emptyState`, `labels`, `className` |
-| **Your handlers** | `onOpenLink`, `onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment`, `onMessageMenu(message, request: MessageMenuRequest) => boolean \| void` |
+| **Your handlers** | `onOpenLink`, `onRetryBody`, `onPreviewAttachment`, `onDownloadAttachment`, `onLoadRemoteImages(message)`, `onMessageMenu(message, request: MessageMenuRequest) => boolean \| void` |
 | **Paging & scale** | `hasOlder`, `onLoadOlder`, `loadingOlder`, `onVisibleRangeChange`, `maxRendered`, `autoScroll`, `loading` |
 | **Presentation** | `senderRunWindowMs`, `blockRemoteImages` |
 
@@ -1040,12 +1058,32 @@ allowlist, or a setting that trusts some categories and not others:
 <MailChatView
   messages={messages}
   blockRemoteImages={(message) => !autoLoadsImagesFor(message.fromAddress)}
+  onLoadRemoteImages={(message) => rememberImagesFrom(message.fromAddress)}
 />
 ```
 
 It is called for every rendered message, so read a `Set`, don't scan a mailbox.
 Whatever it returns, the reader still gets the per-message "Load images" link —
 the predicate decides the default, not what they are allowed to do.
+
+`onLoadRemoteImages(message)` is that link being clicked. The bubble's own
+images are let through **first** — before your callback runs, so a callback
+that throws or does nothing never costs the reader the images they asked for
+— and then you are told which message it was. That is where an allowlist
+remembers the sender. Answer `blockRemoteImages` differently from then on and
+every other bubble of theirs already on screen loads too; the clicked bubble
+is already unblocked, so it does not load a second time. **Remembering has to
+re-render the view**: the predicate is only asked again when `MailChatView`
+renders, and the view does not watch your list, so adding to a `Set` it reads
+changes nothing on screen. Put the list in state, or pass a new predicate when
+it changes — [`examples/react-thread/MailThread.tsx`](./examples/react-thread/MailThread.tsx)
+does it through an `imageSenders` prop the predicate is memoised on. The
+callback is read at click time, so an inline arrow function is fine: a new one
+per render never rebuilds a frame. Omit it and the link loads that one bubble
+and tells nobody, as before 0.2.7. A host with its own list passes the same
+prop to `ChatBubble` or `MessageBody`; `SandboxedBody`, which renders html and
+knows no message, takes `onFrameLoadImages()` instead, with no argument — the
+same split as `onMessageMenu(message, request)` and `onFrameMenu(request)`.
 
 The pieces are exported individually for a host that wants its own list:
 `ChatBubble`, `MessageBody`, `SandboxedBody`, `AttachmentChip`, `Avatar`,
@@ -1094,6 +1132,7 @@ test/               one file per module, mirroring src/
 docs/
   INTEGRATION.md    the beginner walkthrough this README is the reference for
   media/            the README screenshots, rendered by scripts/media/
+CHANGELOG.md        what changed in each release, for a host upgrading
 .github/workflows/  ci.yml (every push/PR) and publish.yml (v* tags)
 ```
 

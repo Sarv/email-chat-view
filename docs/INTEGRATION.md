@@ -200,9 +200,9 @@ props table:
 | --- | --- | --- |
 | `maxRendered` | `50` | bubbles in the DOM at once; the rest sit behind "show earlier" |
 | `autoScroll` | `true` | jump to the newest message when it changes |
-| `blockRemoteImages` | `true` | remote images are blocked by CSP until you opt in; takes a `(message) => boolean` when the answer differs per message |
+| `blockRemoteImages` | `true` | remote images are blocked by CSP until you opt in; takes a `(message) => boolean` when the answer differs per message. Pair it with `onLoadRemoteImages(message)` to hear when the reader clicks "Load images" on a bubble |
 | `locale` | the reader's | dates are formatted in the reader's own zone, at render time |
-| `senderRunWindowMs` | `5 min` | consecutive messages from one sender inside this window render compact |
+| `senderRunWindowMs` | `5 min` | consecutive messages from one sender inside this window render compact: no avatar or name, just a slim header with their own time and your `renderHeaderMeta` marks |
 
 Bodies are sanitized (DOMPurify) and rendered inside a sandboxed frame with a
 strict CSP, so a hostile mail cannot script your page or phone home.
@@ -400,6 +400,9 @@ thread's genuine first message. Concatenate in date order afterwards.
 | Cannot find module `email-chat-view/transform` (types) | old `moduleResolution` | set `"bundler"` / `"node16"` |
 | `does not provide an export named 'X'` after an upgrade | your bundler's pre-bundled dep cache is stale — Vite keys it on the lockfile, so a hand-copied `dist/` does not invalidate it | delete `node_modules/.vite` (or run with `--force`) and restart the dev server |
 | Remote images do not load | `blockRemoteImages` defaults to `true`, and it is the view's prop — your own "always load images" setting is not consulted unless you pass it | pass `blockRemoteImages={false}`, or a `(message) => boolean` when the answer depends on the sender or the category |
+| "Load images" in a bubble never remembers the sender | the banner is drawn by the view; without `onLoadRemoteImages` it loads that one bubble and tells nobody | pass `onLoadRemoteImages={(message) => remember(message.fromAddress)}` and let your `blockRemoteImages` predicate read what you remembered |
+| After "Load images", the sender's other bubbles stay blocked until something else re-renders | the predicate is only asked again when `MailChatView` renders, and the view does not watch your list — adding to a `Set` it reads re-renders nothing | remember into state, or pass a new predicate when the list changes (`useCallback` on the list, as `examples/react-thread/MailThread.tsx` does with `imageSenders`) |
+| A run's follow-up bubbles show a time now, where they had none | 0.2.7 gave every run follower a slim header — its own time, then your `renderHeaderMeta` marks; `.sec-head--meta-only` became `.sec-head--run` | nothing to do, unless you styled `.sec-head--meta-only`: move that rule to `.sec-head--run` |
 | Part of a message vanished | a rule matched real content | see [Why part of my email disappeared](../README.md#why-part-of-my-email-disappeared) — `message.applied` names the rule that cut it |
 
 Every removal is attributable: `message.applied` is an array of rule names such
@@ -420,6 +423,7 @@ array first — it tells you which rule to turn off or narrow.
 - [ ] A cache created outside render
 - [ ] `renderActions` / `renderQuickActions` / `renderFooter` / `renderHeaderMeta` returning `null` when there is nothing to act on
 - [ ] `onMessageMenu` returning `false` wherever you have no menu to show, so the browser's own still opens
+- [ ] `onLoadRemoteImages` wired to your image allowlist, if you keep one, so "Load images" in a bubble remembers the sender
 - [ ] Checked `message.applied` on a real thread to see what the rules removed
 
 ---
