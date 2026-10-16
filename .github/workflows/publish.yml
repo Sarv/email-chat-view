@@ -9,6 +9,17 @@
 # `npm version` locally still works and is still fine (it writes package.json
 # and the matching tag together); this just stops a forgotten bump from being
 # the thing that fails a release.
+#
+# One tag releases every platform:
+#   - npm         `@sarv-in/email-chat-view`, published here
+#   - iOS         Swift Package Manager resolves the tag itself; nothing to upload
+#   - Android     JitPack builds `com.github.Sarv:email-chat-view:<tag>` from the
+#                 tag; the `jitpack` job asks for it so it builds now, and fails
+#                 this run if it does not
+#   - GitHub      a release with generated notes, once all of the above are out
+#
+# The iOS and Android wrappers are tested BEFORE npm publishes, because all
+# three ship the same committed page and none of them can be taken back.
 name: Publish
 
 on:
@@ -26,7 +37,37 @@ permissions:
   id-token: write
 
 jobs:
+  # The Swift package, with the committed page in real WebKit. What SwiftPM
+  # serves for this tag is exactly what this job tests.
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+
+  # The Android library, built with the same command jitpack.yml runs, so a
+  # JitPack failure shows up here, before anything is published.
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: >-
+          ./gradlew --no-daemon
+          :emailchatview:testDebugUnitTest
+          :emailchatview:lintRelease
+          :emailchatview:publishReleasePublicationToMavenLocal
+          -PreleaseVersion=${{ github.ref_name }}
+
   publish:
+    needs: [ios, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +115,10 @@ jobs:
           # --no-git-tag-version: write the file only. No commit, no second tag,
           # and no clean-worktree requirement. --allow-same-version so the
           # ordinary case (package.json already bumped) is not an error.
-          npm version "$version" --no-git-tag-version --allow-same-version
+          # --ignore-scripts: the `version` hook in package.json rebuilds and
+          # stages the mobile page for a LOCAL bump; here it would only rebuild
+          # what the next steps build and check anyway.
+          npm version "$version" --no-git-tag-version --allow-same-version --ignore-scripts
           echo "OK: publishing ${version}"
 
       # The whole pipeline before anything leaves the building. A published
@@ -88,6 +132,11 @@ jobs:
       # unpublished after 72 hours.
       - run: pnpm test:coverage
       - run: pnpm build
+      # The page iOS and Android load is committed, not built at install time
+      # (SwiftPM never runs npm), so the tag must carry a page built from the
+      # tag's own src/. A stale one fails here, before npm gets a version whose
+      # mobile page disagrees with its JavaScript.
+      - run: pnpm check:mobile
 
       # No NODE_AUTH_TOKEN, on purpose. This repo is a TRUSTED PUBLISHER on npm
       # (npmjs.com -> package -> Access), so npm swaps the `id-token: write`
@@ -104,3 +153,40 @@ jobs:
       # removed and the workflow goes back to a token.
       - name: Publish
         run: npm publish --provenance --access public
+
+  # JitPack builds on first request. Ask now, and wait, so the Android artifact
+  # exists before anyone is told the release is out, and a broken build fails
+  # this run instead of an app's Gradle sync.
+  jitpack:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build on JitPack and wait for it
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          base="https://jitpack.io/com/github/${GITHUB_REPOSITORY}/${tag}"
+          for attempt in $(seq 1 30); do
+            status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 "${base}/email-chat-view-${tag}.pom" || true)"
+            if [ "$status" = "200" ]; then
+              echo "OK: com.github.Sarv:email-chat-view:${tag} is on JitPack"
+              exit 0
+            fi
+            echo "attempt ${attempt}: HTTP ${status}, still building"
+            sleep 30
+          done
+          echo "::error::JitPack did not produce ${tag}; build log follows"
+          curl -s --max-time 60 "${base}/build.log" | tail -n 80
+          exit 1
+
+  github-release:
+    needs: [publish, jitpack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes
