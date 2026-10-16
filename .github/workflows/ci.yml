@@ -32,6 +32,35 @@ jobs:
       # one fails here. See the comment in eslint.config.js.
       - run: pnpm lint
       - run: pnpm format:check
+      # The committed mobile page must match src/. Caught here, on the commit
+      # that forgot `pnpm build:mobile`, not on the release tag.
+      - run: pnpm check:mobile
+
+  # The Swift package, with the page in real WebKit at phone width.
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+
+  # The Android library: unit tests, lint, and the publish JitPack will run.
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: >-
+          ./gradlew --no-daemon
+          :emailchatview:testDebugUnitTest
+          :emailchatview:lintRelease
+          :emailchatview:publishReleasePublicationToMavenLocal
 
   test:
     runs-on: ${{ matrix.os }}
