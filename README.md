@@ -58,6 +58,7 @@ for the things that go wrong on a first integration. This page is the reference.
 - [Rendering messages you produced yourself](#rendering-messages-you-produced-yourself) — the AI / bring-your-own path
 - [Per-bubble actions: menus, star, reply](#per-bubble-actions-menus-star-reply)
 - [Examples](#examples)
+- [iOS and Android](#ios-and-android)
 - [Running outside a browser](#running-outside-a-browser)
 - [Dates: say which unit you have](#dates-say-which-unit-you-have)
 - [Big threads: how mails are supplied](#big-threads-how-mails-are-supplied)
@@ -522,6 +523,28 @@ The first two run straight from a clone:
 pnpm install && pnpm build
 node examples/node-transform/thread-to-chat.mjs
 ```
+
+---
+
+## iOS and Android
+
+The same view runs in native apps, inside a WebView: a Swift package for iOS
+(`EmailChatThread` for SwiftUI, `EmailChatWebView` for UIKit) and an Android
+library (`EmailChatView`). Both load one bundled page built from this source,
+so a rule or bubble fix reaches web, iOS and Android together. You send typed
+`Mail` values; you get back typed events (link tapped, retry, attachment,
+load older, visible mails), each keyed by mail id.
+
+```swift
+EmailChatThread(state: ThreadState(mails: mails, currentUserAddress: [me])) { event in
+    if case .openLink(let url) = event { openURL(url) }
+}
+```
+
+Install with Swift Package Manager (`https://github.com/Sarv/email-chat-view.git`,
+from `0.3.0`) or from JitPack (`com.github.Sarv:email-chat-view:v0.3.0`).
+Step-by-step integration, the full event list and theming are in
+**[mobile/README.md](mobile/README.md)**.
 
 ---
 
