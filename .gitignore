@@ -7,3 +7,9 @@ coverage/
 # SwiftPM (the iOS wrapper, Package.swift at the root)
 .build/
 .swiftpm/
+
+# Gradle / Android Studio (the Android wrapper, mobile/android)
+mobile/android/.gradle/
+mobile/android/**/build/
+mobile/android/local.properties
+mobile/android/.idea/
