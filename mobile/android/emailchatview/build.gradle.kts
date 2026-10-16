@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    `maven-publish`
 }
 
 android {
@@ -24,6 +25,14 @@ android {
     }
     sourceSets["test"].java.srcDir("src/test/kotlin")
 
+    // The one variant JitPack serves. Sources ride along so "go to definition"
+    // in an app lands on Kotlin, not a decompiled class.
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -41,3 +50,17 @@ dependencies {
     testImplementation("org.json:json:20240303")
 }
 
+// Published by JitPack from a version tag (see jitpack.yml at the repo root),
+// as `com.github.Sarv:email-chat-view:<tag>`. The version is the tag JitPack
+// is building, passed in as `releaseVersion`, so there is no Android version
+// number to keep in step with package.json — the tag already is one.
+publishing {
+    publications {
+        register<MavenPublication>("release") {
+            groupId = "com.github.Sarv"
+            artifactId = "email-chat-view"
+            version = providers.gradleProperty("releaseVersion").getOrElse("dev")
+            afterEvaluate { from(components["release"]) }
+        }
+    }
+}

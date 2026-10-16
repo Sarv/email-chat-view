@@ -1,0 +1,13 @@
+# JitPack builds the Android library from a version tag the first time anyone
+# asks for it (the publish workflow asks right after the npm release, so the
+# build runs then, not on some app's first sync).
+#
+#   implementation("com.github.Sarv:email-chat-view:v0.3.0")
+#
+# The Gradle build lives in mobile/android, not at the root, so the install
+# step is spelled out. JitPack serves whatever lands in the local Maven repo,
+# and `$VERSION` is the tag it is building.
+jdk:
+  - openjdk17
+install:
+  - cd mobile/android && ./gradlew --no-daemon :emailchatview:publishReleasePublicationToMavenLocal -PreleaseVersion=$VERSION
