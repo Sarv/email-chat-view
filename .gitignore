@@ -3,3 +3,7 @@ dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
+
+# SwiftPM (the iOS wrapper, Package.swift at the root)
+.build/
+.swiftpm/
