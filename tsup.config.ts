@@ -36,4 +36,19 @@ export default defineConfig([
     minify: true,
     clean: false,
   },
+  {
+    // The mobile bundle: React, the view and the transform in ONE script with
+    // no imports, which `scripts/mobile/build-html.mjs` inlines into the page
+    // the iOS and Android wrappers load. IIFE because a WebView page loaded
+    // from a file has no module resolution to speak of, and everything is
+    // bundled because there is no `node_modules` on a phone.
+    entry: { 'email-chat-view': 'src/mobile/entry.ts' },
+    outDir: 'dist/mobile',
+    format: ['iife'],
+    platform: 'browser',
+    noExternal: [/.*/],
+    env: { NODE_ENV: 'production' },
+    minify: true,
+    clean: false,
+  },
 ]);

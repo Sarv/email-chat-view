@@ -22,7 +22,15 @@ export default defineConfig({
       // Barrels re-export and nothing else; `transform.ts`, `view.ts` and
       // `index.ts` are pure `export` lines, so counting them inflates the
       // number without testing anything.
-      exclude: ['src/index.ts', 'src/transform.ts', 'src/view.ts', 'src/styles/**'],
+      // `mobile/entry.ts` is one boot call on `window`; what it runs is
+      // `bootMobileHost`, which is covered.
+      exclude: [
+        'src/index.ts',
+        'src/transform.ts',
+        'src/view.ts',
+        'src/styles/**',
+        'src/mobile/entry.ts',
+      ],
       // Enforced, not aspirational. Every rule in this package can silently
       // delete part of somebody's email, so an untested branch is not a
       // cosmetic gap — CI must fail on it, or coverage decays with the first
