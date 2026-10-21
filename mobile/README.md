@@ -279,6 +279,17 @@ For a team that wants the conversation as **data** and builds the UI natively.
 plus the raw-mail parser, with no React and no DOM — into the platform's own
 JavaScript engine. No WebView is created and nothing touches the network.
 
+It has two methods, one per kind of input:
+
+| You have | Call | You get |
+| --- | --- | --- |
+| Raw mail: `.eml` bytes, an IMAP `BODY[]` | `parseRawMail(bytes)` | a `Mail` |
+| Mail as fields (from, to, date, HTML body) from your API or database | nothing: build the `Mail` yourself, exactly as for the view ([iOS](#ios-swift), [Android](#android-kotlin) "Map your model") | a `Mail` |
+| Either, as a list of `Mail` | `messages(mails, …)` | cleaned `ChatMessage`s, in HTML or plain text |
+
+There is no separate "parse HTML" step: `messages` is it. It strips quoted
+history and signatures, dedupes and sorts the thread, and sets `isFromMe`.
+
 ```mermaid
 sequenceDiagram
     participant App as Your app (Swift / Kotlin)
