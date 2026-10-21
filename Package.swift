@@ -10,9 +10,11 @@ import PackageDescription
 
 let package = Package(
     name: "EmailChatView",
-    // iOS 16.2 / macOS 13.1 are where WebKit gained `color-mix()`, which the
-    // stylesheet uses for its washes and tints.
-    platforms: [.iOS("16.2"), .macOS("13.1")],
+    // iOS 15 / macOS 12. WebKit there has no `color-mix()`, so the frame wash
+    // is passed as `rgba()` and designed mails fall back to a plain page (see
+    // `flattenTransparentMix` and the `@supports` rule in the stylesheet). The
+    // page's script is built for Safari 15 (`target` in tsup.config.ts).
+    platforms: [.iOS(.v15), .macOS(.v12)],
     products: [
         .library(name: "EmailChatView", targets: ["EmailChatView"]),
     ],

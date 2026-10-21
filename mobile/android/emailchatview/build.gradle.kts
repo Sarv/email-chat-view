@@ -9,9 +9,9 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        // The page needs a WebView with `color-mix()` (Chromium 111+). WebView
-        // updates through the Play Store independently of the OS, so the floor
-        // here is about the API surface, not the engine.
+        // The page's script is built for Chromium 90+ (`target` in
+        // tsup.config.ts). WebView updates through the Play Store independently
+        // of the OS, so the floor here is about the API surface, not the engine.
         minSdk = 24
         consumerProguardFiles("consumer-rules.pro")
     }

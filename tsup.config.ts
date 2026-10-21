@@ -46,6 +46,11 @@ export default defineConfig([
     outDir: 'dist/mobile',
     format: ['iife'],
     platform: 'browser',
+    // The oldest engines the wrappers support: iOS 15's WKWebView and an
+    // Android System WebView of Chromium 90. esbuild lowers what it can for
+    // them and FAILS the build on syntax it cannot (a regex lookbehind, say,
+    // which would stop the whole page parsing on iOS 15).
+    target: ['safari15', 'chrome90'],
     noExternal: [/.*/],
     env: { NODE_ENV: 'production' },
     minify: true,
