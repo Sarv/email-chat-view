@@ -16,6 +16,20 @@ src/ (TypeScript)
 So a rule fix or a bubble change reaches web, iOS and Android together, and
 there is no Swift or Kotlin reimplementation to keep in step.
 
+**Two ways in**, from the same library:
+
+| | WebView view | Data only — `EmailChatCore` |
+| --- | --- | --- |
+| You get | the finished chat UI | `[ChatMessage]` — you draw the bubbles |
+| Runs in | `WKWebView` / `WebView` | JavaScriptCore (iOS) / sandboxed V8 isolate (Android) |
+| Body format | rich text | rich text (default) or plain text |
+| Raw `.eml` input | parse with `EmailChatCore`, then render | `parseRawMail` |
+| Requires | iOS 15+ · Android API 24+ | iOS 15+ · Android API 26+ |
+
+Pick the view for the fastest integration; pick
+[`EmailChatCore`](#data-only-emailchatcore) when your design system owns the
+bubbles. Both can live in one app.
+
 ## The model
 
 - **In:** a `ThreadState`, sent whole on every change: the mails, the reader's
@@ -75,7 +89,10 @@ Checklist before you ship:
 
 ## iOS (Swift)
 
-Requires iOS 16.2+ (macOS 13.1+ also works).
+Requires iOS 15+ (macOS 12+ also works). On iOS 15.0 to 16.1, WebKit has no
+`color-mix()`, so a designed (newsletter-style) mail is printed on the plain
+surface rather than on a page in the sender's colour. The tinted border still
+marks whose mail it is. Everything else looks the same.
 
 **Install.** In Xcode, choose **File → Add Package Dependencies…**. Enter
 `https://github.com/Sarv/email-chat-view.git`, choose **Up to Next Major
@@ -157,8 +174,9 @@ UIKit: `EmailChatWebView` is a `UIView`. Set `onEvent`, call `render(_:)`.
 
 ## Android (Kotlin)
 
-Requires minSdk 24 and a system WebView based on Chromium 111+. The WebView
-updates through the Play Store, so this is nearly every device in use.
+Requires minSdk 24 and a system WebView based on Chromium 90+. The WebView
+updates through the Play Store, so this is nearly every device in use. Below
+Chromium 111, designed mails get the same plain-page fallback as iOS 15.
 
 **Install.** The library is published on JitPack from each release tag. Add
 the repository in `settings.gradle.kts`:
@@ -254,6 +272,180 @@ and call `destroy()` in `onDestroy`.
 The module ships a consumer R8 rule that keeps the bridge method. Without it,
 a minified release build would drop every event.
 
+## Data only: `EmailChatCore`
+
+For a team that wants the conversation as **data** and builds the UI natively.
+`EmailChatCore` loads `email-chat-core.js` — the same transform the view runs,
+plus the raw-mail parser, with no React and no DOM — into the platform's own
+JavaScript engine. No WebView is created and nothing touches the network.
+
+```mermaid
+sequenceDiagram
+    participant App as Your app (Swift / Kotlin)
+    participant Core as EmailChatCore
+    participant JS as email-chat-core.js<br/>(JavaScriptCore / V8 isolate)
+
+    App->>Core: create (once per screen)
+    Core->>JS: load the bundled script
+    opt raw .eml bytes
+        App->>Core: parseRawMail(bytes, id?, inlineImages?)
+        Core->>JS: bytes (one char per byte) + options
+        JS-->>Core: { ok, value: Mail }
+        Core-->>App: Mail
+    end
+    App->>Core: messages(mails, currentUserAddress, bodyFormat, …)
+    Core->>JS: JSON request
+    JS->>JS: sort · drop drafts · clean bodies (cached) · format
+    JS-->>Core: { ok, value: [ChatMessage] } or { ok: false, error }
+    Core-->>App: [ChatMessage], or a thrown EmailChatCoreError / EmailChatCoreException
+```
+
+Keep **one instance per screen**: it remembers every body it has cleaned, so
+re-sending the whole thread when one body arrives only cleans that body. Calls
+are serialized, so it is safe to call from any task or coroutine.
+
+### iOS
+
+```swift
+import EmailChatView
+
+let core = try EmailChatCore()   // an actor; create once, keep it
+
+// From an .eml file, or the source your IMAP library fetched.
+let mail = try await core.parseRawMail(try Data(contentsOf: emlURL), id: uid)
+
+let messages = try await core.messages(
+    from: storedMails + [mail],
+    currentUserAddress: ["me@acme.example"],
+    bodyFormat: .text          // .html (default) for rich text
+)
+
+for message in messages {
+    print(message.fromName ?? message.fromAddress, message.date ?? "unknown date", message.body)
+}
+```
+
+Failures throw `EmailChatCoreError` (its `message` says what went wrong).
+
+### Android
+
+```kotlin
+if (!EmailChatCore.isSupported()) {
+    // API < 26, or a WebView too old to provide the JavaScript sandbox:
+    // fall back to EmailChatView, which works from API 24.
+    return
+}
+
+// In a coroutine. Close it when the screen goes away: it holds an isolate.
+val core = EmailChatCore.create(context)
+try {
+    val mail = core.parseRawMail(emlFile.readBytes(), id = uid)
+    val messages = core.messages(
+        storedMails + mail,
+        currentUserAddress = listOf("me@acme.example"),
+        bodyFormat = BodyFormat.TEXT,   // BodyFormat.HTML (default) for rich text
+    )
+    adapter.submitList(messages)
+} finally {
+    core.close()
+}
+```
+
+Failures throw `EmailChatCoreException`. `create` is annotated
+`@RequiresApi(26)`; call `isSupported()` first. The library's own `minSdk`
+stays 24 — the sandbox dependency is only used behind that check.
+
+### Options and models
+
+`messages(...)`:
+
+| Parameter | Default | Effect |
+| --- | --- | --- |
+| `mails` | — | the thread, in any order |
+| `currentUserAddress` | empty | the reader's addresses; their messages get `isFromMe == true` (nil/null with none given) |
+| `bodyFormat` | `html` | `html`: cleaned rich text for an HTML renderer. `text`: the same cleaned body as plain text, lines and list bullets kept |
+| `containsThreadStart` | `true` | the oldest mail really starts the thread, so its quoted history is kept |
+| `includeDrafts` | `false` | keep drafts as messages |
+
+`parseRawMail(bytes, id, inlineImages)` returns a `Mail`. `id` defaults to the
+Message-ID. `inlineImages` (default true) turns `cid:` images into `data:`
+URIs so a signature logo shows. `To`/`Cc` come back in header form,
+attachments with their sizes, and a body-referenced image marked `inline`.
+
+`ChatMessage` mirrors the web type: `id`, `fromAddress`, `fromName`,
+`toAddress`/`toNames`, `ccAddress`/`ccNames`, `date` (`Date?` on iOS,
+`dateMillis: Long?` on Android), `dateApprox`, `body`, `attachments`,
+`isFromMe`, `bodyPending`, `bodyFailed`, `applied` (the rules that shaped the
+body) and `sourceId`.
+
+### Limits
+
+- **Charsets.** The native engines have no `TextDecoder`, so the core brings
+  its own for UTF-8, UTF-16 and windows-1252 (which covers ISO-8859-1 and
+  US-ASCII). A body in another legacy charset (Shift_JIS, GB2312, KOI8-R, …)
+  decodes as windows-1252, so its non-Latin text comes out garbled. *Why:* the
+  legacy charset tables (as `iconv-lite` ships them) are about 350 KB, which
+  would double the core for every app, and almost all mail today is UTF-8. The web and Node use the
+  platform's decoder and have no such limit, so a host that must read such mail
+  can parse it there.
+- **Undated mail.** A raw mail with neither a `Date` nor a `Received` header
+  parses with date `0`, and `messages` reports that as an unknown (nil/null)
+  date, sorted last.
+- **Android verification.** The Android core is unit-tested against the real
+  `email-chat-core.js` in GraalJS, through the same chunked transport it uses
+  on a device. Run it on your minimum supported device before relying on it.
+- **Big threads.** Requests and replies cross the engine boundary as strings.
+  Large inline images in raw mails make them large; pass `inlineImages: false`
+  if you resolve `cid:` yourself.
+- **No streaming or partial results.** `messages` returns the whole thread at
+  once. That matches the web transform, and the body cache keeps a re-send
+  cheap.
+
+## Platform support: what, and why not lower
+
+| | Minimum | Set by |
+| --- | --- | --- |
+| iOS view (`EmailChatThread`, `EmailChatWebView`) | iOS 15, macOS 12 | the web engine the page is built for |
+| iOS data (`EmailChatCore`) | iOS 15, macOS 12 | the same — JavaScriptCore is Safari's engine |
+| Android view (`EmailChatView`) | API 24 (Android 7.0) + a Chromium 90+ System WebView | our tested floor |
+| Android data (`EmailChatCore`) | API 26 (Android 8.0) + a WebView that ships the JavaScript sandbox | `androidx.javascriptengine` |
+
+**iOS 15.** The Swift code itself is not the limit; it compiles for iOS 14.
+The limit is the web engine, which is part of the OS on iOS and cannot be
+updated separately:
+
+- The page and the core are built for Safari 15 (`target` in
+  `tsup.config.ts`). The build fails on any syntax iOS 15 cannot run, so
+  "supports iOS 15" is checked on every build, not just stated.
+- iOS 14.0–14.4 has no flexbox `gap`, which the bubble and header layout uses
+  throughout; the conversation would render with its spacing collapsed.
+- We have no iOS 14 simulator in our toolchain or CI, and we do not claim a
+  floor we cannot run.
+- iOS 15.0–15.3 lack `Object.hasOwn`, which the core's HTML parser uses; the
+  core installs a small stand-in for it, so all of iOS 15 works.
+- iOS 15.0–16.1 lack CSS `color-mix()`. A designed mail prints on the plain
+  surface there (see [iOS](#ios-swift)); everything else is identical.
+
+**Android view: API 24.** Here the web engine is the System WebView, which
+updates from the Play Store separately from the OS, so the floor is about the
+WebView rather than the API level. The Kotlin code uses nothing above API 21
+(Android lint passes at `minSdk 21`), but older Android releases stop receiving
+WebView updates and are left on engines older than the Chromium 90 the page is
+built for. API 24 is the floor we test. A team that needs API 21–23, and whose
+devices carry an up-to-date WebView, can ask for it to be lowered.
+
+**Android data: API 26.** `androidx.javascriptengine`, which provides the
+sandboxed V8 isolate, declares `minSdk 26` itself, and the isolate runs inside
+the WebView package, so an old WebView cannot provide one either. That is why:
+
+- The library keeps `minSdk 24` for the view and overrides the engine's floor
+  in its manifest. The engine is only touched behind `EmailChatCore.isSupported()`.
+- `isSupported()` is false on API 24–25 or with a WebView too old for the
+  sandbox. Fall back to the WebView view there, or parse on your server.
+- There is no other engine to fall back to: running JavaScript in a hidden
+  WebView would bring back everything `EmailChatCore` exists to avoid, and
+  bundling a JavaScript engine of our own would add megabytes to every app.
+
 ## Theming
 
 - **Dark mode** follows the app. The page uses `prefers-color-scheme`, which
@@ -311,7 +503,7 @@ Android module reads its assets from the same folder. After changing anything
 in `src/`:
 
 ```sh
-pnpm build:mobile                # rebuild the page, then commit it with the change
+pnpm build:mobile                # rebuild the page and email-chat-core.js, then commit them with the change
 swift test                       # iOS wrapper + the page in real WebKit at 390px wide
 pnpm check:mobile                # fails if the committed page is stale
 cd mobile/android && ./gradlew :emailchatview:testDebugUnitTest
@@ -319,3 +511,5 @@ cd mobile/android && ./gradlew :emailchatview:testDebugUnitTest
 
 `src/mobile/` is the page's side of the bridge (tested with the rest of the
 suite). `Bridge.swift` and `Bridge.kt` mirror it on each platform.
+`src/mobile/core.ts` is the data core's JavaScript side; `EmailChatCore.swift`,
+`EmailChatCore.kt` and `CoreProtocol.kt` are its native side.
