@@ -37,6 +37,10 @@ export type {
 } from './transform/mails-to-messages.js';
 export { htmlToPlainText } from './transform/plain-text.js';
 
+// --- Raw messages (.eml, IMAP BODY[]) ------------------------------------------
+export { parseRawMail } from './raw/parse-raw-mail.js';
+export type { ParseRawMailOptions, RawMailSource } from './raw/parse-raw-mail.js';
+
 // --- Individual strip passes -------------------------------------------------
 export {
   cleanReplyBody,

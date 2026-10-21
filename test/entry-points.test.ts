@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import * as root from '../src/index.js';
+import { parseRawMail as definedParseRawMail } from '../src/raw/parse-raw-mail.js';
 import {
   quoteDate as definedQuoteDate,
   threadToMessages,
@@ -23,8 +24,14 @@ import {
   compareEpochMillis as definedCompareEpochMillis,
   toEpochMillis,
 } from '../src/transform/mail-fields.js';
+import { htmlToPlainText as definedHtmlToPlainText } from '../src/transform/plain-text.js';
 import * as transform from '../src/transform.js';
-import type { QuoteDate } from '../src/transform.js';
+import type {
+  BodyFormat,
+  ParseRawMailOptions,
+  QuoteDate,
+  RawMailSource,
+} from '../src/transform.js';
 
 import { parser } from './helpers/parser.js';
 
@@ -57,6 +64,25 @@ describe('entry points: date-order helpers', () => {
   it('re-exports them from the package root', () => {
     expect(root.compareEpochMillis).toBe(definedCompareEpochMillis);
     expect(root.quoteDate).toBe(definedQuoteDate);
+  });
+});
+
+describe('entry points: raw mail and plain text', () => {
+  // Regression: a web client such as SarvInbox reads .eml files and wants
+  // plain-text previews without React. Both have to reach it from /transform
+  // and from the root, as the functions the core bundle runs.
+  it('exports parseRawMail and htmlToPlainText from /transform and the root', () => {
+    expect(transform.parseRawMail).toBe(definedParseRawMail);
+    expect(transform.htmlToPlainText).toBe(definedHtmlToPlainText);
+    expect(root.parseRawMail).toBe(definedParseRawMail);
+    expect(root.htmlToPlainText).toBe(definedHtmlToPlainText);
+  });
+
+  it('exports the option types a host writes against', () => {
+    const format: BodyFormat = 'text';
+    const options: ParseRawMailOptions = { id: 'x', inlineImages: false };
+    const source: RawMailSource = new Uint8Array();
+    expect([format, options.id, source.byteLength]).toEqual(['text', 'x', 0]);
   });
 });
 
