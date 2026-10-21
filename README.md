@@ -726,9 +726,11 @@ let messages = try await core.messages(from: [mail], currentUserAddress: [me], b
 ```
 
 ```kotlin
-EmailChatCore.create(context).use { core ->
-    val mail = core.parseRawMail(emlBytes)
-    val messages = core.messages(listOf(mail), currentUserAddress = listOf(me), bodyFormat = BodyFormat.TEXT)
+if (EmailChatCore.isSupported()) {   // API 26+ with a sandbox-capable WebView
+    EmailChatCore.create(context).use { core ->
+        val mail = core.parseRawMail(emlBytes)
+        val messages = core.messages(listOf(mail), currentUserAddress = listOf(me), bodyFormat = BodyFormat.TEXT)
+    }
 }
 ```
 
