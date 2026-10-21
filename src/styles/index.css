@@ -513,6 +513,18 @@
   overflow: hidden;
 }
 
+/* Safari before 16.2 (iOS 15, iOS 16.0–16.1) has no `color-mix()`, so the
+   opaque page `ChatBubble` hands over inline is invalid there: the page went
+   transparent, the sender's tint came up behind the body text, and the cell
+   wash derived from it was dropped too. Print on the plain surface instead.
+   The tinted mat and spine still say whose mail it is. `!important` because
+   the value it replaces is set inline. */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .sec-bubble--doc:not(.sec-bubble--mine) {
+    --sec-doc-page: var(--sec-surface) !important;
+  }
+}
+
 /* The attachments are ours, not the sender's, so they sit ON the mat below the
    page rather than being ruled off inside it. */
 .sec-bubble--doc .sec-attachments {

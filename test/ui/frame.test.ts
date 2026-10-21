@@ -6,6 +6,7 @@ import {
   clickedHref,
   estimateFrameHeight,
   FALLBACK_FRAME_THEME,
+  flattenTransparentMix,
   isLoadedSrcdoc,
   measureFrameHeight,
   readFrameTheme,
@@ -118,6 +119,57 @@ describe('readFrameTheme', () => {
     expect(theme.ink).toBe('#101010');
     expect(theme.muted).toBe(FALLBACK_FRAME_THEME.muted);
     expect(theme.font).toBe(FALLBACK_FRAME_THEME.font);
+  });
+});
+
+// Regression: Safari before 16.2 (iOS 15) has no color-mix(), and dropped the
+// frame's whole wash declaration, so sender cell colours lost their softening.
+describe('flattenTransparentMix', () => {
+  it('spells a mix with transparent as the same colour in rgba()', () => {
+    expect(flattenTransparentMix('color-mix(in srgb, #171a21 62%, transparent)')).toBe(
+      'rgba(23, 26, 33, 0.62)',
+    );
+    expect(flattenTransparentMix(' color-mix(in srgb, #fff 62%, transparent) ')).toBe(
+      'rgba(255, 255, 255, 0.62)',
+    );
+    expect(flattenTransparentMix('color-mix(in srgb, rgb(10, 20, 30) 50%, transparent)')).toBe(
+      'rgba(10, 20, 30, 0.5)',
+    );
+    expect(flattenTransparentMix('color-mix(in srgb, rgb(10 20 30) 50%, transparent)')).toBe(
+      'rgba(10, 20, 30, 0.5)',
+    );
+  });
+
+  it('scales a colour that is already translucent', () => {
+    expect(flattenTransparentMix('color-mix(in srgb, #ffffff80 50%, transparent)')).toBe(
+      'rgba(255, 255, 255, 0.25)',
+    );
+    expect(flattenTransparentMix('color-mix(in srgb, #fff8 50%, transparent)')).toBe(
+      'rgba(255, 255, 255, 0.27)',
+    );
+    expect(flattenTransparentMix('color-mix(in srgb, rgba(1, 2, 3, 0.5) 50%, transparent)')).toBe(
+      'rgba(1, 2, 3, 0.25)',
+    );
+  });
+
+  it('leaves anything it cannot read exactly as it was', () => {
+    const unreadable = [
+      'rgba(255, 255, 255, 0.62)',
+      'color-mix(in srgb, Canvas 62%, transparent)',
+      'color-mix(in srgb, white 62%, transparent)',
+      'color-mix(in oklch, #fff 62%, transparent)',
+      'color-mix(in srgb, #fff 62%, black)',
+      'color-mix(in srgb, #ff 62%, transparent)',
+    ];
+    unreadable.forEach((value) => expect(flattenTransparentMix(value)).toBe(value));
+  });
+
+  it('is applied to the wash readFrameTheme copies in', () => {
+    const theme = readFrameTheme(
+      elementWithTokens({ '--sec-frame-wash': 'color-mix(in srgb, #ffffff 62%, transparent)' }),
+    );
+    expect(theme.wash).toBe('rgba(255, 255, 255, 0.62)');
+    expect(readFrameTheme(elementWithTokens({})).wash).toBe(FALLBACK_FRAME_THEME.wash);
   });
 });
 

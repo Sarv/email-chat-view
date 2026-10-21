@@ -100,6 +100,58 @@ const THEME_TOKENS: Record<Exclude<keyof FrameTheme, 'colorScheme'>, string> = {
 };
 
 /**
+ * `color-mix(in srgb, <colour> <p>%, transparent)`, the only mix the stylesheet
+ * writes, for a hex or `rgb()` colour. The colour is matched by its shape
+ * rather than by `.+?`, which could trade whitespace with the `\s` around it
+ * and backtrack polynomially on a hostile token value.
+ */
+const MIX_WITH_TRANSPARENT =
+  /^color-mix\(\s*in srgb\s*,\s*(#[\da-f]+|rgba?\([^)]*\))\s+(\d+(?:\.\d+)?)%\s*,\s*transparent\s*\)$/i;
+
+/** `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa` as 0-255 channels and a 0-1 alpha. */
+function parseHexColor(color: string): [number, number, number, number] | null {
+  const hex = /^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.exec(color)?.[1];
+  if (!hex) return null;
+  const full = hex.length <= 4 ? [...hex].map((digit) => digit + digit).join('') : hex;
+  const channel = (index: number) => parseInt(full.slice(index * 2, index * 2 + 2), 16);
+  return [channel(0), channel(1), channel(2), full.length === 8 ? channel(3) / 255 : 1];
+}
+
+/** `rgb(r, g, b)` / `rgba(r, g, b, a)`, comma- or space-separated. */
+function parseRgbColor(color: string): [number, number, number, number] | null {
+  const match =
+    /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)$/i.exec(color);
+  if (!match) return null;
+  const alpha = match[4] === undefined ? 1 : Number(match[4]);
+  return [Number(match[1]), Number(match[2]), Number(match[3]), alpha];
+}
+
+/**
+ * Spell a translucent wash without `color-mix()`.
+ *
+ * `color-mix(in srgb, C p%, transparent)` IS `C` at alpha `p` — mixing with
+ * `transparent` only scales the alpha — so this returns the same colour as
+ * `rgba()`. That matters because the wash is copied into the frame's own
+ * stylesheet, and Safari before 16.2 (iOS 15, iOS 16.0–16.1) has no
+ * `color-mix()`: the declaration it sits in is dropped, and a sender's
+ * saturated cell colours lose the softening the wash exists for. `rgba()`
+ * works everywhere, and the colour still comes from the host's tokens.
+ *
+ * Anything it cannot read (a named colour, another colour space) is returned
+ * unchanged, which is no worse than before.
+ */
+export function flattenTransparentMix(value: string): string {
+  const match = MIX_WITH_TRANSPARENT.exec(value.trim());
+  if (!match) return value;
+  const color = String(match[1]).trim();
+  const channels = parseHexColor(color) ?? parseRgbColor(color);
+  if (!channels) return value;
+  const [red, green, blue, alpha] = channels;
+  const mixedAlpha = Math.round(alpha * Number(match[2])) / 100;
+  return `rgba(${red}, ${green}, ${blue}, ${mixedAlpha})`;
+}
+
+/**
  * Read the frame's theme out of the host's cascade.
  *
  * The frame is a separate document, so it inherits nothing — every value has to
@@ -117,6 +169,7 @@ export function readFrameTheme(element: Element | null | undefined): FrameTheme 
     const value = computed.getPropertyValue(token).trim();
     if (value) theme[slot] = value;
   }
+  theme.wash = flattenTransparentMix(theme.wash);
   // Read off the host because the `<iframe>` inherits it from there; a
   // consumer that styles `.sec-frame` with a different scheme must style the
   // host instead, or the two disagree again.
