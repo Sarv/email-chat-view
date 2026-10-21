@@ -538,3 +538,49 @@ describe('threadToMessages with a segment cache', () => {
     expect(cache.size).toBe(0);
   });
 });
+
+describe("threadToMessages with bodyFormat: 'text'", () => {
+  const thread = [mail({ id: 'b', fromAddress: 'bob@example.com', date: SEP_2, body: BOB_REPLY })];
+
+  it('defaults to rich text', () => {
+    const [, reply] = threadToMessages(thread, options);
+    expect(reply?.body).toContain('Tuesday works.</div>');
+  });
+
+  // Regression: a native list renders text, not HTML. The recovered quote has
+  // to arrive as text too, or a bubble shows tags the sender never wrote.
+  it('returns every bubble, the recovered quote included, as plain text', () => {
+    const messages = threadToMessages(thread, { ...options, bodyFormat: 'text' });
+    expect(messages.map(({ body }) => body)).toEqual([
+      'Can we move the review to Tuesday?',
+      'Tuesday works.',
+    ]);
+  });
+
+  it('leaves a pending body empty', () => {
+    const [message] = threadToMessages([mail({ id: 'p', bodyPending: true })], {
+      ...options,
+      bodyFormat: 'text',
+    });
+    expect(message).toMatchObject({ body: '', bodyPending: true });
+  });
+
+  // Regression: the host re-sends the whole thread on every change, so the
+  // flattening rides on the segment cache rather than re-parsing each time.
+  it('flattens each segment once while the cache holds it', () => {
+    let parses = 0;
+    const counting = (html: string) => {
+      parses += 1;
+      return parser(html);
+    };
+    const cache = createSegmentCache();
+    const textOptions = { parser: counting, cache, bodyFormat: 'text' as const };
+
+    threadToMessages(thread, textOptions);
+    const afterFirst = parses;
+    const again = threadToMessages(thread, textOptions);
+
+    expect(parses).toBe(afterFirst);
+    expect(again[1]?.body).toBe('Tuesday works.');
+  });
+});

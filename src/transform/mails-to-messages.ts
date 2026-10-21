@@ -21,6 +21,7 @@ import {
   ownAddressSet,
   toEpochMillis,
 } from './mail-fields.js';
+import { htmlToPlainText } from './plain-text.js';
 import type { CleanReplyBodyOptions } from './strip.js';
 import { cleanReplyBody } from './strip.js';
 
@@ -28,7 +29,18 @@ import { cleanReplyBody } from './strip.js';
 export interface CleanedBody {
   html: string;
   applied: string[];
+  /** The same body as plain text, once a `'text'` caller has asked for it. */
+  text?: string;
 }
+
+/**
+ * What {@link ChatMessage.body} holds.
+ *
+ *   'html'  rich text: the cleaned HTML the chat view renders. The default.
+ *   'text'  plain text: the same cleaned body flattened to lines, for a host
+ *           that draws its own bubbles. See {@link htmlToPlainText}.
+ */
+export type BodyFormat = 'html' | 'text';
 
 /**
  * Memo for cleaned bodies, keyed by message id and invalidated by body content.
@@ -63,6 +75,11 @@ export interface MailsToMessagesOptions extends CleanReplyBodyOptions {
   /** Render drafts as bubbles too. Off by default; an unsent draft is not a turn. */
   includeDrafts?: boolean;
   /**
+   * Rich text (`'html'`, the default) or plain text (`'text'`) bodies. The chat
+   * view renders HTML; ask for text only when you draw the bubbles yourself.
+   */
+  bodyFormat?: BodyFormat;
+  /**
    * Whether `mails` contains the thread's first message. Defaults to `true`.
    *
    * The oldest mail in the array is cleaned with its quoted history left in
@@ -95,14 +112,20 @@ export interface MailToMessageContext {
   dateUnit?: DateUnit;
   /** Memo for cleaned bodies. See {@link createBodyCache}. */
   cache?: BodyCache;
+  /** Rich or plain text body. Defaults to `'html'`. See {@link BodyFormat}. */
+  bodyFormat?: BodyFormat;
   /** Rule overrides, passed through to {@link cleanReplyBody}. */
   stripOptions?: CleanReplyBodyOptions;
 }
 
 /** {@link MailToMessageContext} with the reader's identity already resolved. */
-interface ResolvedContext extends Omit<MailToMessageContext, 'currentUserAddress' | 'dateUnit'> {
+interface ResolvedContext extends Omit<
+  MailToMessageContext,
+  'currentUserAddress' | 'dateUnit' | 'bodyFormat'
+> {
   ownAddresses: Set<string>;
   dateUnit: DateUnit;
+  bodyFormat: BodyFormat;
 }
 
 /**
@@ -114,8 +137,13 @@ interface ResolvedContext extends Omit<MailToMessageContext, 'currentUserAddress
  * only for the thread's real first message.
  */
 export function mailToMessage(mail: Mail, context: MailToMessageContext): ChatMessage {
-  const { currentUserAddress, dateUnit = 'ms', ...rest } = context;
-  return toMessage(mail, { ...rest, ownAddresses: ownAddressSet(currentUserAddress), dateUnit });
+  const { currentUserAddress, dateUnit = 'ms', bodyFormat = 'html', ...rest } = context;
+  return toMessage(mail, {
+    ...rest,
+    ownAddresses: ownAddressSet(currentUserAddress),
+    dateUnit,
+    bodyFormat,
+  });
 }
 
 /**
@@ -126,7 +154,7 @@ export function mailToMessage(mail: Mail, context: MailToMessageContext): ChatMe
  * function above.
  */
 function toMessage(mail: Mail, context: ResolvedContext): ChatMessage {
-  const { isOldest, ownAddresses, dateUnit, cache, stripOptions } = context;
+  const { isOldest, ownAddresses, dateUnit, bodyFormat, cache, stripOptions } = context;
 
   const base: ChatMessage = {
     id: mail.id,
@@ -155,7 +183,7 @@ function toMessage(mail: Mail, context: ResolvedContext): ChatMessage {
   }
 
   const cached = cache?.get(mail.id, raw);
-  const cleaned =
+  const cleaned: CleanedBody =
     cached ??
     cleanReplyBody(raw, {
       ...stripOptions,
@@ -163,9 +191,18 @@ function toMessage(mail: Mail, context: ResolvedContext): ChatMessage {
       // nothing to strip — only genuine content a quote pass could damage.
       keepQuotedHistory: isOldest,
     });
-  if (!cached) cache?.set(mail.id, raw, cleaned);
 
-  return { ...base, body: cleaned.html, applied: cleaned.applied };
+  // Text is derived from the cleaned HTML, never cleaned separately, so the two
+  // formats always agree on what the message says. Memoized beside the HTML so
+  // a text-only host pays for the flattening once per body, like the clean.
+  const text =
+    bodyFormat === 'text'
+      ? (cleaned.text ?? htmlToPlainText(cleaned.html, stripOptions?.parser))
+      : undefined;
+  const stored = text === undefined || cleaned.text !== undefined ? cleaned : { ...cleaned, text };
+  if (stored !== cached) cache?.set(mail.id, raw, stored);
+
+  return { ...base, body: text ?? cleaned.html, applied: cleaned.applied };
 }
 
 /**
@@ -189,6 +226,7 @@ export function mailsToMessages(
     cache,
     includeDrafts = false,
     containsThreadStart = true,
+    bodyFormat = 'html',
     ...stripOptions
   } = options;
 
@@ -209,6 +247,7 @@ export function mailsToMessages(
       isOldest: mail.id === oldestId,
       ownAddresses,
       dateUnit,
+      bodyFormat,
       cache,
       stripOptions,
     }),

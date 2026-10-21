@@ -113,7 +113,10 @@ export interface ChatMessage {
    * against their calendar deserves to know which of the two is a guess.
    */
   dateApprox?: boolean;
-  /** Displayable HTML for this turn only, quoted history and signature removed. */
+  /**
+   * This turn only, quoted history and signature removed. Displayable HTML by
+   * default; plain text when the transform was asked for `bodyFormat: 'text'`.
+   */
   body: string;
   /** Attachments worth showing (inline parts already filtered out). */
   attachments?: Attachment[];

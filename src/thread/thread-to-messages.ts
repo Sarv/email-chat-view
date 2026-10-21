@@ -34,6 +34,8 @@ import {
   ownAddressSet,
   toEpochMillis,
 } from '../transform/mail-fields.js';
+import type { BodyFormat } from '../transform/mails-to-messages.js';
+import { htmlToPlainText } from '../transform/plain-text.js';
 import type { ChatMessage, DateUnit, Mail } from '../types.js';
 
 import { splitMailBody, type BodySegment, type SplitMailBodyOptions } from './split-body.js';
@@ -92,6 +94,8 @@ export interface ThreadToMessagesOptions extends SplitMailBodyOptions {
   cache?: SegmentCache;
   /** Render drafts too. Off by default; an unsent draft is not a turn. */
   includeDrafts?: boolean;
+  /** Rich or plain text body. Defaults to `'html'`. See {@link BodyFormat}. */
+  bodyFormat?: BodyFormat;
 }
 
 /** A candidate message, before de-duplication and date inference. */
@@ -101,6 +105,37 @@ interface Candidate {
   isOwn: boolean;
   /** Position in the flattened scan. The tiebreak that keeps sorting stable. */
   order: number;
+  /** The segment the body came from; null for a mail whose body has not arrived. */
+  segment: BodySegment | null;
+}
+
+/**
+ * Each segment's plain text, keyed by the segment itself.
+ *
+ * A segment lives as long as the {@link SegmentCache} entry holding it, so a
+ * host that re-sends the whole thread on every change flattens each body once,
+ * and a segment the cache evicts takes its text with it.
+ */
+const segmentText = new WeakMap<BodySegment, string>();
+
+/** A segment's text, flattened once and memoized beside it. */
+function plainTextOf(segment: BodySegment, options: ThreadToMessagesOptions): string {
+  const memo = segmentText.get(segment);
+  if (memo !== undefined) return memo;
+  const text = htmlToPlainText(segment.html, options.parser);
+  segmentText.set(segment, text);
+  return text;
+}
+
+/**
+ * The message in the format asked for. Converted after the merge, so a quoted
+ * copy that is dropped is never flattened, and the merge itself still compares
+ * the HTML both formats come from.
+ */
+function inFormat(candidate: Candidate, options: ThreadToMessagesOptions): ChatMessage {
+  const { message, segment } = candidate;
+  if (options.bodyFormat !== 'text' || !segment) return message;
+  return { ...message, body: plainTextOf(segment, options) };
 }
 
 /** The carrier mail's own message, taken whole from the mail's own fields. */
@@ -127,6 +162,7 @@ function ownCandidate(
     key: contentKey(segment.html),
     isOwn: true,
     order: context.order,
+    segment,
   };
 }
 
@@ -256,6 +292,7 @@ function quotedCandidate(
     key: contentKey(segment.html),
     isOwn: false,
     order: context.order,
+    segment,
   };
 }
 
@@ -271,6 +308,7 @@ function pendingCandidate(
   );
   return {
     ...candidate,
+    segment: null,
     message: {
       ...candidate.message,
       applied: undefined,
@@ -374,5 +412,5 @@ export function threadToMessages(
       (left, right) =>
         compareEpochMillis(left.message.date, right.message.date) || left.order - right.order,
     )
-    .map(({ message }) => message);
+    .map((candidate) => inFormat(candidate, options));
 }

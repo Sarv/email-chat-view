@@ -31,9 +31,11 @@ export type { HtmlParser } from './dom.js';
 export { createBodyCache, mailsToMessages, mailToMessage } from './transform/mails-to-messages.js';
 export type {
   BodyCache,
+  BodyFormat,
   MailsToMessagesOptions,
   MailToMessageContext,
 } from './transform/mails-to-messages.js';
+export { htmlToPlainText } from './transform/plain-text.js';
 
 // --- Individual strip passes -------------------------------------------------
 export {
