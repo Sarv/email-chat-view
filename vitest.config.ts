@@ -23,13 +23,18 @@ export default defineConfig({
       // `index.ts` are pure `export` lines, so counting them inflates the
       // number without testing anything.
       // `mobile/entry.ts` is one boot call on `window`; what it runs is
-      // `bootMobileHost`, which is covered.
+      // `bootMobileHost`, which is covered. Likewise `core-entry.ts` and
+      // `engine-globals.ts` only hand `createCore` and the engine stand-ins to
+      // `globalThis`; both are covered, and the bundle itself is exercised by
+      // the Swift tests in a real JavaScriptCore.
       exclude: [
         'src/index.ts',
         'src/transform.ts',
         'src/view.ts',
         'src/styles/**',
         'src/mobile/entry.ts',
+        'src/mobile/core-entry.ts',
+        'src/mobile/engine-globals.ts',
       ],
       // Enforced, not aspirational. Every rule in this package can silently
       // delete part of somebody's email, so an untested branch is not a

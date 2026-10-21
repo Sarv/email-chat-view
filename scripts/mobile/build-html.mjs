@@ -1,5 +1,6 @@
 /**
- * Builds the single HTML page the iOS and Android wrappers load.
+ * Builds the single HTML page the iOS and Android wrappers load, and the
+ * native data bundle (`email-chat-core.js`) beside it.
  *
  *     pnpm build:mobile
  *
@@ -68,3 +69,12 @@ const html = `<!doctype html>
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, html);
 console.log(`wrote ${OUT.slice(ROOT.length + 1)} (${(html.length / 1024).toFixed(0)} KB)`);
+
+/*
+ * The native data bundle (`EmailChatCore` in Swift and Kotlin) ships beside the
+ * page, as plain script: a bare JavaScript engine evaluates source, not HTML.
+ */
+const CORE_OUT = join(dirname(OUT), 'email-chat-core.js');
+const core = readFileSync(join(ROOT, 'dist', 'mobile', 'email-chat-core.global.js'), 'utf8');
+writeFileSync(CORE_OUT, core);
+console.log(`wrote ${CORE_OUT.slice(ROOT.length + 1)} (${(core.length / 1024).toFixed(0)} KB)`);

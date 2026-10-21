@@ -42,7 +42,15 @@ export default defineConfig([
     // the iOS and Android wrappers load. IIFE because a WebView page loaded
     // from a file has no module resolution to speak of, and everything is
     // bundled because there is no `node_modules` on a phone.
-    entry: { 'email-chat-view': 'src/mobile/entry.ts' },
+    //
+    // The second entry is the native DATA bundle: the transform and the raw
+    // mail parser with no React and no view, run by the Swift and Kotlin
+    // `EmailChatCore` in a bare JavaScript engine (JavaScriptCore, a V8
+    // isolate). Same targets — iOS 15's JavaScriptCore is Safari 15's.
+    entry: {
+      'email-chat-view': 'src/mobile/entry.ts',
+      'email-chat-core': 'src/mobile/core-entry.ts',
+    },
     outDir: 'dist/mobile',
     format: ['iife'],
     platform: 'browser',

@@ -13,7 +13,8 @@
   },
   "type": "module",
   "sideEffects": [
-    "**/*.css"
+    "**/*.css",
+    "./src/mobile/engine-globals.ts"
   ],
   "files": [
     "dist",
@@ -57,7 +58,7 @@
   "scripts": {
     "build": "tsup",
     "build:mobile": "pnpm run build && node scripts/mobile/build-html.mjs",
-    "check:mobile": "pnpm run build:mobile && git diff --exit-code -- mobile/ios/Sources/EmailChatView/Resources/email-chat-view.html",
+    "check:mobile": "pnpm run build:mobile && git diff --exit-code -- mobile/ios/Sources/EmailChatView/Resources",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -72,7 +73,7 @@
     "media": "pnpm run build && node scripts/media/render.mjs && node scripts/media/actions.mjs",
     "media:render": "pnpm run build && node scripts/media/render.mjs",
     "media:actions": "pnpm run build && node scripts/media/actions.mjs",
-    "version": "pnpm run build:mobile && git add mobile/ios/Sources/EmailChatView/Resources/email-chat-view.html",
+    "version": "pnpm run build:mobile && git add mobile/ios/Sources/EmailChatView/Resources",
     "prepublishOnly": "pnpm run build"
   },
   "keywords": [
