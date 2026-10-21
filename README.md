@@ -36,9 +36,9 @@ like a chat instead of like fourteen nested copies of itself.
 </p>
 
 **Nothing to configure.** No React needed for the transform, no DOM assumed, no
-`mode` flag, nothing global. Three small runtime dependencies come along —
-`dompurify`, `email-addresses`, `chrono-node` — and none of them needs a line of
-setup from you. TypeScript throughout, ESM and CJS,
+`mode` flag, nothing global. Four small runtime dependencies come along —
+`dompurify`, `email-addresses`, `chrono-node`, and `postal-mime` for raw
+`.eml` input — and none of them needs a line of setup from you. TypeScript throughout, ESM and CJS,
 and **100% test coverage** — statements, branches, functions and lines, across
 every rule and every engine. The threshold is enforced in CI on three operating
 systems and Node 18/20/22, so a rule cannot land with an untested branch: each
@@ -54,6 +54,9 @@ for the things that go wrong on a first integration. This page is the reference.
 
 - [Install](#install)
 - [Quick start](#quick-start)
+  - [Plain text instead of HTML](#plain-text-instead-of-html)
+  - [Raw mail: `.eml` files and IMAP source](#raw-mail-eml-files-and-imap-source)
+- [How it works](#how-it-works) — from your mails to a rendered bubble, with diagrams
 - [The `Mail` shape](#the-mail-shape)
 - [Rendering messages you produced yourself](#rendering-messages-you-produced-yourself) — the AI / bring-your-own path
 - [Per-bubble actions: menus, star, reply](#per-bubble-actions-menus-star-reply)
@@ -96,7 +99,7 @@ under `@sarv-in/email-chat-view/transform` imports them.
 | Import | Contains | Needs React |
 | --- | --- | --- |
 | `@sarv-in/email-chat-view` | everything, view included | yes |
-| `@sarv-in/email-chat-view/transform` | the mail → message transform, rules, classification | no |
+| `@sarv-in/email-chat-view/transform` | the mail → message transform, raw `.eml` parsing, rules, classification | no |
 | `@sarv-in/email-chat-view/style.css` | the compiled stylesheet | — |
 
 Both ESM and CJS ship, with matching type declarations for each:
@@ -178,6 +181,94 @@ Three rules decide that merge, and each one is a bug somebody hit:
 A recovered message carries `sourceId` — the mail it was found inside — and an
 id of `<mailId>#<segmentIndex>`, stable as the thread grows.
 
+### Plain text instead of HTML
+
+Every message-producing method returns the body in one of two formats, chosen
+with `bodyFormat`:
+
+| `bodyFormat` | `ChatMessage.body` holds | Use it for |
+| --- | --- | --- |
+| `'html'` (default) | the cleaned **rich text** (HTML) | `MailChatView`, a WebView, any HTML renderer |
+| `'text'` | the same cleaned body as **plain text** | a native list, a notification, a search snippet, an SMS-style preview |
+
+```ts
+const messages = mailsToMessages(mails, {
+  currentUserAddress: 'me@example.com',
+  bodyFormat: 'text',
+});
+// [{ id: '1', body: 'Hi — are we still on for Tuesday?', ... }]
+```
+
+`threadToMessages` and `mailToMessage` take the same option. Leave it out and
+nothing changes: rich text is the default and the existing flow.
+
+The text is derived **from the cleaned HTML**, never from the raw body, so the
+two formats always agree about what the message says — quoted history,
+signatures and footers are already gone. Whitespace collapses the way a browser
+collapses it, `<br>` and block elements become line breaks, list items get `•`
+or their number, `<pre>` keeps its layout, and styles, scripts and images
+contribute nothing. Links keep their text only.
+
+The flattening is memoized beside the cleaned HTML in the same cache
+(`createBodyCache` / `createSegmentCache`), so re-running the transform on every
+change flattens each body once. For a single string you already cleaned,
+`htmlToPlainText(html, parser?)` is the same conversion on its own.
+
+> `MailChatView` renders HTML. Hand it `'html'` messages — plain text goes in
+> your own UI.
+
+### Raw mail: `.eml` files and IMAP source
+
+`Mail.body` is HTML. If what you hold is the **whole raw message** instead — an
+`.eml` file a user dropped in, an IMAP `BODY[]` fetch, a Gmail API
+`format=raw` payload, a `.eml` attachment inside another mail — parse it first:
+
+```ts
+import { parseRawMail, threadToMessages } from '@sarv-in/email-chat-view/transform';
+
+// A browser <input type="file">: the File goes in as it is.
+const mails = await Promise.all([...input.files].map((file) => parseRawMail(file)));
+
+const messages = threadToMessages(mails, { currentUserAddress: 'me@example.com' });
+```
+
+`parseRawMail(raw, options?)` is async and returns a `Mail` ready for any
+method above. `raw` can be a `string`, an `ArrayBuffer`, a `Uint8Array` (a Node
+`Buffer` is one) or a `Blob`/`File`. Hand over bytes when you have them: a
+string has already been decoded once, and a mail in a legacy charset only
+decodes correctly from its bytes.
+
+```ts
+// Node: a file on disk, or the source an IMAP client fetched.
+import { readFile } from 'node:fs/promises';
+
+const mail = await parseRawMail(await readFile('thread/reply.eml'));
+const mail2 = await parseRawMail(imapMessage.source, { id: String(imapMessage.uid) });
+```
+
+What it does with the message:
+
+| `Mail` field | Taken from |
+| --- | --- |
+| `id` | `options.id`, else the `Message-ID`, else `sender\|date\|subject` — stable across re-parses of the same file |
+| `messageId` | the `Message-ID` header, or `null` |
+| `fromAddress` / `fromName` | the `From` header |
+| `toAddress` / `ccAddress` | `To` / `Cc` in header form (`"Lee, Ann" <ann@x>, bob@y`), groups flattened — a display name with a comma survives |
+| `date` | the `Date` header in epoch **ms**; without one, the time on the topmost `Received` header; with neither, `NaN`, which the transform sorts last as an unknown date rather than in 1970 |
+| `body` | the HTML part; a text-only mail becomes escaped HTML with its line breaks kept |
+| `attachments` | every attachment with its decoded size; an image the body shows by `cid:` is marked `inline` and kept out of the attachment row |
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `id` | Message-ID | the mail's id in the thread — pass your store's key (an IMAP UID) when callbacks must hand it back |
+| `inlineImages` | `true` | rewrite `cid:` image references to `data:` URIs of the attached image, so a signature logo or a pasted screenshot shows. Turn off to keep bodies small and resolve `cid:` yourself |
+
+MIME decoding — multipart trees, quoted-printable and base64, charsets,
+encoded-word headers — is [postal-mime](https://github.com/postalsys/postal-mime)'s,
+so it runs the same in a browser, Node, a worker, and the native cores below.
+Parsed mails are plain `Mail` objects: store them, mix them with mails from your
+database in one thread, and use the same caches.
+
 ### The view
 
 ```tsx
@@ -198,6 +289,88 @@ a mail is, so anything that produces per-turn content — the transform above, a
 LLM extraction pass, your own parser — feeds the same component. **That is why
 there is no `mode` prop anywhere in this package:** the view renders messages,
 and where they came from is your business.
+
+---
+
+## How it works
+
+Two layers, and you can stop after either. The **transform** turns mails into
+`ChatMessage[]` — data only, no React, no DOM assumed. The **view** renders that
+array. Everything a host does is one of the paths below.
+
+```mermaid
+flowchart TD
+    subgraph you["Your app"]
+        DB["Rows from your store<br/>(id, from, date, HTML body)"]
+        RAW[".eml file · IMAP BODY[] ·<br/>Gmail format=raw"]
+    end
+
+    RAW -->|"parseRawMail(raw, {id, inlineImages})<br/>async · postal-mime"| MAIL
+    DB -->|"thin mapper"| MAIL["Mail[]"]
+
+    MAIL --> CHOOSE{"Which conversation?"}
+    CHOOSE -->|"one bubble per mail"| M2M["mailsToMessages(mails, options)"]
+    CHOOSE -->|"recover messages seen only as quotes"| T2M["threadToMessages(mails, options)"]
+
+    M2M --> CLEAN["cleanReplyBody<br/>signature · banner · quote · lines ·<br/>sign-off · markers · disclaimer"]
+    T2M --> SPLIT["splitMailBody → segments<br/>→ clean each → merge copies"]
+    SPLIT --> CLEAN
+
+    CLEAN --> FMT{"bodyFormat"}
+    FMT -->|"'html' (default)"| HTML["ChatMessage[]<br/>body = rich text"]
+    FMT -->|"'text'"| TEXT["ChatMessage[]<br/>body = plain text<br/>(htmlToPlainText)"]
+
+    HTML --> VIEW["&lt;MailChatView messages /&gt;<br/>React · WebView on iOS/Android"]
+    HTML --> OWN["Your own UI"]
+    TEXT --> OWN
+```
+
+What a single call does, step by step:
+
+```mermaid
+sequenceDiagram
+    participant App as Your app
+    participant Raw as parseRawMail
+    participant T as mailsToMessages / threadToMessages
+    participant Cache as body / segment cache
+    participant Rules as rule chain
+
+    opt you hold raw .eml bytes
+        App->>Raw: bytes, File, or string
+        Raw-->>App: Mail (headers mapped, cid: images inlined)
+    end
+    App->>T: Mail[], { currentUserAddress, dateUnit, bodyFormat, cache }
+    T->>T: drop drafts, normalize dates to ms, sort oldest first
+    loop each mail
+        T->>Cache: (id, body) seen before?
+        alt cached
+            Cache-->>T: cleaned HTML (and its text, once asked for)
+        else new body
+            T->>Rules: clean (one parse, seven passes)
+            Rules-->>T: { html, applied }
+            T->>Cache: store
+        end
+    end
+    T-->>App: ChatMessage[] — body in the requested format, isFromMe, applied, dates
+```
+
+Native apps run the same code. The WebView path loads the whole view; the
+data-only path (`EmailChatCore`) loads just the transform into the platform's
+own JavaScript engine and hands back typed values:
+
+```mermaid
+flowchart LR
+    subgraph native["Swift / Kotlin app"]
+        CALL["EmailChatCore<br/>messages(from:) · parseRawMail(_:)"]
+        UI["Your SwiftUI / UIKit /<br/>Compose / View list"]
+    end
+    subgraph engine["JavaScriptCore (iOS) · V8 isolate (Android)"]
+        CORE["email-chat-core.js<br/>the same transform + parseRawMail"]
+    end
+    CALL -->|"JSON request · raw bytes"| CORE
+    CORE -->|"{ ok, value } / { ok, error }"| CALL
+    CALL -->|"[ChatMessage] · Mail"| UI
+```
 
 ---
 
@@ -540,6 +713,29 @@ EmailChatThread(state: ThreadState(mails: mails, currentUserAddress: [me])) { ev
     if case .openLink(let url) = event { openURL(url) }
 }
 ```
+
+**Only the data, native UI.** A team that draws its own bubbles skips the
+WebView: `EmailChatCore` runs the same transform in JavaScriptCore (iOS) or a
+sandboxed V8 isolate (Android, API 26+) and returns typed `ChatMessage` values,
+in rich or plain text. It parses raw `.eml` bytes too.
+
+```swift
+let core = try EmailChatCore()
+let mail = try await core.parseRawMail(emlData)
+let messages = try await core.messages(from: [mail], currentUserAddress: [me], bodyFormat: .text)
+```
+
+```kotlin
+EmailChatCore.create(context).use { core ->
+    val mail = core.parseRawMail(emlBytes)
+    val messages = core.messages(listOf(mail), currentUserAddress = listOf(me), bodyFormat = BodyFormat.TEXT)
+}
+```
+
+Minimums: **iOS 15** for both the view and `EmailChatCore`; **Android API 24**
+for the view and **API 26** for `EmailChatCore`. The reasons, and the limits of
+the native data path (charsets, an undated raw mail), are in
+[Platform support](mobile/README.md#platform-support-what-and-why-not-lower).
 
 Install with Swift Package Manager (`https://github.com/Sarv/email-chat-view.git`,
 from `0.3.0`) or from JitPack (`com.github.Sarv:email-chat-view:v0.3.0`).
@@ -963,6 +1159,8 @@ view is root-only: importing it pulls in React.
 | `mailToMessage(mail, context)` | one mail, for a retry or a single arriving body |
 | `createBodyCache(capacity?)` | LRU memo keyed on `(id, body)`. Default capacity 500 |
 | `threadToMessages(mails, options?)` | the same, but the messages quoted INSIDE those mails become bubbles too |
+| `parseRawMail(raw, options?)` | async. A raw RFC 822 message (`string`, `ArrayBuffer`, `Uint8Array`, `Blob`/`File`) → `Mail`. Options `id`, `inlineImages` — see [Raw mail](#raw-mail-eml-files-and-imap-source) |
+| `htmlToPlainText(html, parser?)` | cleaned HTML → readable plain text, the conversion `bodyFormat: 'text'` uses |
 | `createSegmentCache(capacity?)` | LRU memo for split bodies, keyed on `(id, body)` |
 | `contentKey(html)` | the normalized key two copies of one message collapse on |
 | `compareEpochMillis(left, right)` | the transforms' sort comparator: oldest first, unreadable (`NaN`) dates last — see [Dating and ordering them](#dating-and-ordering-them-the-way-the-library-does) |
@@ -971,16 +1169,17 @@ view is root-only: importing it pulls in React.
 | `stripSignature` / `stripBanner` / `stripQuote` / `stripLines` / `stripSignOff` / `stripMarkers` / `stripDisclaimer` | one family each, for a corpus that wants six of the seven |
 
 `MailsToMessagesOptions`: `parser`, `currentUserAddress` (string or array),
-`dateUnit`, `cache`, `includeDrafts`, `containsThreadStart`, plus any
+`dateUnit`, `cache`, `includeDrafts`, `containsThreadStart`, `bodyFormat`
+(`'html'` default, or `'text'` — see [Plain text](#plain-text-instead-of-html)), plus any
 `cleanReplyBody` option (`signatureRules`, `bannerRules`, `lineRules`,
 `quoteRules`, `markerRules`, `disclaimerRules`, `keepSignOff`,
 `keepQuotedHistory`).
 
 `MailToMessageContext`: `isOldest` (required), `currentUserAddress`, `dateUnit`,
-`cache`, `stripOptions`. The reader's addresses are normalized here, so pass
+`bodyFormat`, `cache`, `stripOptions`. The reader's addresses are normalized here, so pass
 them as you hold them — matching is case-insensitive.
 
-`ThreadToMessagesOptions`: those same five, plus `segment` and `solo`
+`ThreadToMessagesOptions`: those same five, `bodyFormat`, plus `segment` and `solo`
 (`CleanFragmentOptions` for a quoted segment, and for a body with no quotes in
 it) and `refDate`.
 
@@ -1123,7 +1322,8 @@ pass `labels` to translate or reword any of them.
 
 ### Data contract
 
-`Mail`, `ChatMessage`, `Attachment`, `DateUnit` — every field documented inline,
+`Mail`, `ChatMessage`, `Attachment`, `DateUnit`, `BodyFormat`, `RawMailSource`,
+`ParseRawMailOptions` — every field documented inline,
 so your editor explains them without a trip back here.
 
 ---
