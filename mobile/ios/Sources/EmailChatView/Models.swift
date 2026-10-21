@@ -23,8 +23,9 @@ public struct Attachment: Codable, Equatable, Sendable {
 /// A raw message from the mail store, exactly as the transform takes it.
 ///
 /// Mirrors `Mail` in the package's `src/types.ts`; see that file for the
-/// meaning of each field.
-public struct Mail: Encodable, Equatable, Sendable {
+/// meaning of each field. Decodable too, because ``EmailChatCore/parseRawMail(_:id:inlineImages:)``
+/// hands one back.
+public struct Mail: Codable, Equatable, Sendable {
     /// Stable unique id within the thread. Every ``ChatEvent`` names this id.
     public var id: String
     public var messageId: String?
@@ -79,6 +80,97 @@ public struct Mail: Encodable, Equatable, Sendable {
         self.bodyPending = bodyPending
         self.bodyFailed = bodyFailed
         self.isDraft = isDraft
+    }
+
+    /// Reads the core's JSON, where only `id`, `fromAddress` and `date` are
+    /// always present and `date` is epoch milliseconds or null.
+    ///
+    /// A null date — a raw mail with neither a `Date:` nor a `Received:`
+    /// header — becomes the epoch. The transform reads any date at or before
+    /// the epoch as unknown, so the mail still renders under "unknown date"
+    /// when it goes back in, rather than in 1970.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        messageId = try container.decodeIfPresent(String.self, forKey: .messageId)
+        fromAddress = try container.decode(String.self, forKey: .fromAddress)
+        fromName = try container.decodeIfPresent(String.self, forKey: .fromName)
+        toAddress = try container.decodeIfPresent(String.self, forKey: .toAddress)
+        toNames = try container.decodeIfPresent(String.self, forKey: .toNames)
+        ccAddress = try container.decodeIfPresent(String.self, forKey: .ccAddress)
+        ccNames = try container.decodeIfPresent(String.self, forKey: .ccNames)
+        date = Date(timeIntervalSince1970: (try container.decodeIfPresent(Double.self, forKey: .date) ?? 0) / 1000)
+        body = try container.decodeIfPresent(String.self, forKey: .body)
+        attachments = try container.decodeIfPresent([Attachment].self, forKey: .attachments) ?? []
+        bodyPending = try container.decodeIfPresent(Bool.self, forKey: .bodyPending) ?? false
+        bodyFailed = try container.decodeIfPresent(Bool.self, forKey: .bodyFailed) ?? false
+        isDraft = try container.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false
+    }
+}
+
+/// What a message body is returned as.
+public enum BodyFormat: String, Codable, Sendable {
+    /// Displayable HTML, as the chat view renders it. The default.
+    case html
+    /// Plain text with line breaks, for a native text view.
+    case text
+}
+
+/// One chat bubble: a mail, or a message recovered from its quoted history,
+/// with the quoted history and signature already removed.
+///
+/// Mirrors `ChatMessage` in the package's `src/types.ts`.
+public struct ChatMessage: Decodable, Equatable, Sendable {
+    public var id: String
+    public var fromAddress: String
+    public var fromName: String?
+    /// Header form: `"Lee, Ann" <ann@acme.example>, bob@acme.example`.
+    public var toAddress: String?
+    public var toNames: String?
+    public var ccAddress: String?
+    public var ccNames: String?
+    /// When it was sent. Nil when no date could be read: show it under an
+    /// "unknown date" heading rather than inventing one.
+    public var date: Date?
+    /// The date was inferred from the mail that quoted this message.
+    public var dateApprox: Bool
+    /// This turn only: HTML, or plain text when asked for ``BodyFormat/text``.
+    public var body: String
+    /// Real attachments; images the body shows inline are already left out.
+    public var attachments: [Attachment]
+    /// Sent by the reader. Nil when the reader's address was not given.
+    public var isFromMe: Bool?
+    public var bodyPending: Bool
+    public var bodyFailed: Bool
+    /// The cleaning steps that changed the body, for diagnostics.
+    public var applied: [String]
+    /// For a message recovered from quoted history, the mail it came from.
+    public var sourceId: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, fromAddress, fromName, toAddress, toNames, ccAddress, ccNames, date, dateApprox, body
+        case attachments, isFromMe, bodyPending, bodyFailed, applied, sourceId
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        fromAddress = try container.decode(String.self, forKey: .fromAddress)
+        fromName = try container.decodeIfPresent(String.self, forKey: .fromName)
+        toAddress = try container.decodeIfPresent(String.self, forKey: .toAddress)
+        toNames = try container.decodeIfPresent(String.self, forKey: .toNames)
+        ccAddress = try container.decodeIfPresent(String.self, forKey: .ccAddress)
+        ccNames = try container.decodeIfPresent(String.self, forKey: .ccNames)
+        // An unreadable date is NaN in JavaScript, which JSON writes as null.
+        date = try container.decodeIfPresent(Double.self, forKey: .date).map { Date(timeIntervalSince1970: $0 / 1000) }
+        dateApprox = try container.decodeIfPresent(Bool.self, forKey: .dateApprox) ?? false
+        body = try container.decode(String.self, forKey: .body)
+        attachments = try container.decodeIfPresent([Attachment].self, forKey: .attachments) ?? []
+        isFromMe = try container.decodeIfPresent(Bool.self, forKey: .isFromMe)
+        bodyPending = try container.decodeIfPresent(Bool.self, forKey: .bodyPending) ?? false
+        bodyFailed = try container.decodeIfPresent(Bool.self, forKey: .bodyFailed) ?? false
+        applied = try container.decodeIfPresent([String].self, forKey: .applied) ?? []
+        sourceId = try container.decodeIfPresent(String.self, forKey: .sourceId)
     }
 }
 

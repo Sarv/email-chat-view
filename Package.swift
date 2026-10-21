@@ -22,7 +22,11 @@ let package = Package(
         .target(
             name: "EmailChatView",
             path: "mobile/ios/Sources/EmailChatView",
-            resources: [.copy("Resources/email-chat-view.html")]
+            resources: [
+                .copy("Resources/email-chat-view.html"),
+                // The data-only core: the transform for `EmailChatCore`, no view.
+                .copy("Resources/email-chat-core.js"),
+            ]
         ),
         .testTarget(
             name: "EmailChatViewTests",
