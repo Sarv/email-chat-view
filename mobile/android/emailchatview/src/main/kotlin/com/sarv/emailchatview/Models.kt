@@ -44,6 +44,48 @@ data class Mail(
     val isDraft: Boolean = false,
 )
 
+/** What a message body is returned as. */
+enum class BodyFormat(internal val wire: String) {
+    /** Displayable HTML, as the chat view renders it. The default. */
+    HTML("html"),
+
+    /** Plain text with line breaks, for a native text view. */
+    TEXT("text"),
+}
+
+/**
+ * One chat bubble: a mail, or a message recovered from its quoted history,
+ * with the quoted history and signature already removed.
+ *
+ * Mirrors `ChatMessage` in the package's `src/types.ts`.
+ */
+data class ChatMessage(
+    val id: String,
+    val fromAddress: String,
+    /** When it was sent, epoch MILLISECONDS. Null when no date could be read. */
+    val dateMillis: Long?,
+    /** This turn only: HTML, or plain text when asked for [BodyFormat.TEXT]. */
+    val body: String,
+    val fromName: String? = null,
+    /** Header form: `"Lee, Ann" <ann@acme.example>, bob@acme.example`. */
+    val toAddress: String? = null,
+    val toNames: String? = null,
+    val ccAddress: String? = null,
+    val ccNames: String? = null,
+    /** The date was inferred from the mail that quoted this message. */
+    val dateApprox: Boolean = false,
+    /** Real attachments; images the body shows inline are already left out. */
+    val attachments: List<Attachment> = emptyList(),
+    /** Sent by the reader. Null when the reader's address was not given. */
+    val isFromMe: Boolean? = null,
+    val bodyPending: Boolean = false,
+    val bodyFailed: Boolean = false,
+    /** The cleaning steps that changed the body, for diagnostics. */
+    val applied: List<String> = emptyList(),
+    /** For a message recovered from quoted history, the mail it came from. */
+    val sourceId: String? = null,
+)
+
 /**
  * Everything the chat view shows, sent whole on every change.
  *

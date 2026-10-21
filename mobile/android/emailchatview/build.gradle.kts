@@ -44,10 +44,22 @@ kotlin {
 }
 
 dependencies {
+    // EmailChatCore: the transform in a sandboxed V8 isolate, no WebView.
+    implementation("androidx.javascriptengine:javascriptengine:1.1.1")
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.3.0")
+    // 1.9 is the newest line built for Kotlin 2.0; 1.10+ needs the 2.1 compiler.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+
     testImplementation("junit:junit:4.13.2")
     // android.jar's org.json is a stub that throws in local unit tests; the
     // real implementation stands in for it there.
     testImplementation("org.json:json:20240303")
+    // The isolate exists only on a device, so the core's tests run the real
+    // email-chat-core.js through EmailChatCore's transport in GraalJS — another
+    // bare engine with no TextDecoder, Blob or atob, like the isolate.
+    // 23.1 is the last line that runs on JDK 17.
+    testImplementation("org.graalvm.polyglot:polyglot:23.1.12")
+    testImplementation("org.graalvm.polyglot:js-community:23.1.12")
 }
 
 // Published by JitPack from a version tag (see jitpack.yml at the repo root),

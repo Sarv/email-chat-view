@@ -1,2 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest />
+<manifest xmlns:tools="http://schemas.android.com/tools">
+    <!--
+        androidx.javascriptengine needs API 26; the chat view itself runs from
+        API 24. Only EmailChatCore uses the engine, and it is gated on
+        EmailChatCore.isSupported(), so apps keep the lower floor.
+    -->
+    <uses-sdk tools:overrideLibrary="androidx.javascriptengine" />
+</manifest>

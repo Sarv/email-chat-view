@@ -45,7 +45,7 @@ internal object Bridge {
         }
     }
 
-    private fun attachmentOf(json: JSONObject) = Attachment(
+    fun attachmentOf(json: JSONObject) = Attachment(
         filename = json.getString("filename"),
         sizeBytes = if (json.has("sizeBytes")) json.getLong("sizeBytes") else null,
         mimeType = json.optString("mimeType").takeIf { json.has("mimeType") },
