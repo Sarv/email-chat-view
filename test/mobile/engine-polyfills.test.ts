@@ -46,9 +46,14 @@ describe('EngineTextDecoder', () => {
     },
   );
 
-  it('decodes every Windows-1252 byte as the platform does, under its Latin-1 labels too', () => {
+  // Spelled out from the WHATWG index rather than asked of the platform: Node
+  // 20's own TextDecoder decodes 0x80-0x9F as Latin-1 control characters.
+  it('decodes every Windows-1252 byte per the Encoding Standard, under its Latin-1 labels too', () => {
     const all = Uint8Array.from({ length: 256 }, (_, index) => index);
-    const expected = new TextDecoder('windows-1252').decode(all);
+    const latin1 = (from: number, to: number): string =>
+      String.fromCharCode(...all.slice(from, to + 1));
+    const high = '€\x81‚ƒ„…†‡ˆ‰Š‹Œ\x8dŽ\x8f' + '\x90‘’“”•–—˜™š›œ\x9džŸ';
+    const expected = `${latin1(0x00, 0x7f)}${high}${latin1(0xa0, 0xff)}`;
     expect(new EngineTextDecoder('windows-1252').decode(all)).toBe(expected);
     expect(new EngineTextDecoder(' ISO-8859-1 ').decode(all)).toBe(expected);
     expect(new EngineTextDecoder('us-ascii').encoding).toBe('windows-1252');
