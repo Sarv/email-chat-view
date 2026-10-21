@@ -24,7 +24,14 @@ export default tseslint.config(
     // Build output, coverage reports and the generated media. Nothing here is
     // hand-written, so linting it only produces noise. `mobile/` holds Swift and
     // Kotlin, and its only JavaScript is the generated page and Gradle's reports.
-    ignores: ['dist/**', 'coverage/**', 'docs/media/**', 'node_modules/**', 'mobile/**'],
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'docs/media/**',
+      'node_modules/**',
+      'mobile/**',
+      '.build/**',
+    ],
   },
 
   js.configs.recommended,
